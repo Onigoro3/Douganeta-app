@@ -14,7 +14,7 @@ load_dotenv()
 st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整 (安全で美しいグリッド版)
+# 🎨 デザイン調整 (スマホ2列 強制配置版)
 # ==========================================
 st.markdown("""
     <style>
@@ -25,34 +25,41 @@ st.markdown("""
     .block-container {
         padding-top: 0.5rem !important;
         padding-bottom: 5rem !important;
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
+        padding-left: 0.2rem !important;
+        padding-right: 0.2rem !important;
     }
 
-    /* ★スマホ (幅768px以下) の時のレイアウト制御★ 
-       PCではPython側で指定した列数(4列)になりますが、
-       スマホではここで「幅50%（2列）」に強制書き換えします。
-       これが最も崩れにくい設定です。
-    */
+    /* ★スマホ (幅768px以下) の時のレイアウト制御★ */
     @media (max-width: 768px) {
-        /* カラムを横並び許可し、折り返し(wrap)を有効にする */
-        div[data-testid="column"] {
-            width: 50% !important;
-            flex: 0 0 50% !important;
-            min-width: 50% !important;
-            padding: 0 4px !important; /* 左右の隙間 */
+        /* 横並びコンテナの設定: 隙間(gap)をゼロにするのが重要 */
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+            gap: 0 !important; /* これがないと50%+50%で改行されてしまう */
+            padding: 0 !important;
         }
         
-        /* ボタンの文字サイズ調整 */
+        /* カラム（列）の設定: 幅をきっちり50%にする */
+        div[data-testid="column"] {
+            flex: 0 0 50% !important;
+            width: 50% !important;
+            max-width: 50% !important;
+            min-width: 50% !important;
+            padding: 2px !important; /* ボタン同士の隙間はここで作る */
+            margin: 0 !important;
+        }
+        
+        /* ボタンの文字サイズと高さ調整 */
         .stButton > button {
-            font-size: 12px !important;
-            padding: 2px !important;
-            min-height: 48px !important; /* 高さを確保 */
+            font-size: 11px !important;
+            padding: 2px 4px !important;
+            min-height: 42px !important;
             height: 100% !important;
-            line-height: 1.3 !important;
+            line-height: 1.2 !important;
         }
     }
 
+    /* --- PC・共通デザイン --- */
+    
     /* ボタン共通デザイン */
     .stButton > button {
         width: 100% !important;
@@ -66,7 +73,7 @@ st.markdown("""
         color: #262730 !important;
         border: 1px solid #d0d7de !important;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        transition: all 0.2s;
+        transition: all 0.1s;
     }
     
     /* ボタンを押したときの反応 */
@@ -165,7 +172,7 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
-# 座標データ（日本の主要都市）
+# 座標データ
 CITIES = {
     "東京": {"lat": 35.6895, "lon": 139.6917},
     "大阪": {"lat": 34.6937, "lon": 135.5023},
@@ -201,16 +208,14 @@ def clear_tags():
 
 def create_grid(items, cols=4):
     """
-    Python側では4列（PC向け）を作成。
-    スマホではCSSで width: 50% に強制されるため、
-    自動的に 2列 x 2行 のグリッドに変身します。
+    PC: 4列
+    スマホ: CSSで幅50%に強制され、gapが0になるため「2列 x 2行」に折り返される
     """
     for i in range(0, len(items), cols):
         columns = st.columns(cols)
         for j, col in enumerate(columns):
             if i + j < len(items):
                 label, val = items[i + j]
-                # キーをユニークにする
                 if col.button(label, key=f"btn_{val}_{i}_{j}", use_container_width=True):
                     add_tag(val)
 
@@ -238,7 +243,6 @@ main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"
 with main_tab1:
     sub_t1, sub_t2, sub_t3 = st.tabs(["✨ 雰囲気", "📍 ロケ地", "🕒 時間"])
     
-    # cols=4に設定。スマホではCSSの効果で「2列」になります。
     with sub_t1:
         items_atm = [
             ("🎞️ レトロ", "昭和レトロ"), ("🏠 ノスタル", "ノスタルジック"), ("☕ チル", "チル"),
@@ -366,7 +370,6 @@ with main_tab2:
             sr_h, sr_m = map(int, sunrise.split(":"))
             ss_h, ss_m = map(int, sunset.split(":"))
             
-            # マジックアワー計算 (日の入り前30分〜日の入り後15分)
             golden_start = f"{ss_h}:{(ss_m - 30):02d}" if ss_m >= 30 else f"{ss_h-1}:{(ss_m + 30):02d}"
             golden_end = f"{ss_h}:{(ss_m + 15):02d}" if ss_m + 15 < 60 else f"{ss_h+1}:{(ss_m + 15 - 60):02d}"
             
