@@ -14,7 +14,7 @@ load_dotenv()
 st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整 (スマホ2列 強制配置版)
+# 🎨 デザイン調整 (画面固定 & スマホ2列 & ボタン装飾)
 # ==========================================
 st.markdown("""
     <style>
@@ -23,32 +23,47 @@ st.markdown("""
     
     /* 全体の余白調整 */
     .block-container {
-        padding-top: 0.5rem !important;
+        padding-top: 0rem !important;
         padding-bottom: 5rem !important;
         padding-left: 0.2rem !important;
         padding-right: 0.2rem !important;
     }
 
-    /* ★スマホ (幅768px以下) の時のレイアウト制御★ */
+    /* ★画面固定 (Sticky) 設定★ */
+    .tag-container-wrapper {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(5px);
+        padding: 5px 5px 0 5px;
+        border-bottom: 1px solid #eee;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    div[data-baseweb="tab-list"] {
+        position: sticky !important;
+        top: 60px !important;
+        z-index: 999 !important;
+        background-color: rgba(255, 255, 255, 0.95) !important;
+        padding-top: 5px !important;
+        box-shadow: 0 2px 3px rgba(0,0,0,0.05);
+    }
+    
+    /* スマホレイアウト制御 (2列強制) */
     @media (max-width: 768px) {
-        /* 横並びコンテナの設定: 隙間(gap)をゼロにするのが重要 */
         [data-testid="stHorizontalBlock"] {
             flex-wrap: wrap !important;
-            gap: 0 !important; /* これがないと50%+50%で改行されてしまう */
+            gap: 0 !important;
             padding: 0 !important;
         }
-        
-        /* カラム（列）の設定: 幅をきっちり50%にする */
         div[data-testid="column"] {
             flex: 0 0 50% !important;
             width: 50% !important;
             max-width: 50% !important;
             min-width: 50% !important;
-            padding: 2px !important; /* ボタン同士の隙間はここで作る */
+            padding: 2px !important;
             margin: 0 !important;
         }
-        
-        /* ボタンの文字サイズと高さ調整 */
         .stButton > button {
             font-size: 11px !important;
             padding: 2px 4px !important;
@@ -58,60 +73,46 @@ st.markdown("""
         }
     }
 
-    /* --- PC・共通デザイン --- */
-    
     /* ボタン共通デザイン */
     .stButton > button {
         width: 100% !important;
         border-radius: 8px !important;
-        min-height: 3.5rem; /* PCでの高さ */
+        min-height: 3.5rem;
         height: auto;
         font-weight: bold !important;
-        
-        /* 色指定: 白背景・黒文字で見やすく */
         background-color: #ffffff !important;
         color: #262730 !important;
         border: 1px solid #d0d7de !important;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        transition: all 0.1s;
     }
-    
-    /* ボタンを押したときの反応 */
     .stButton > button:active, .stButton > button:focus:not(:active) {
         background-color: #FF4B4B !important;
         color: #ffffff !important;
         border-color: #FF4B4B !important;
         transform: scale(0.98);
     }
-    .stButton > button:hover {
-        border-color: #FF4B4B !important;
-        color: #FF4B4B !important;
-    }
 
-    /* バケツ（選択タグ）のデザイン */
+    /* バケツデザイン */
     .tag-container {
-        background-color: #ffffff;
-        padding: 8px;
-        border-radius: 8px;
-        margin-bottom: 10px;
-        border: 2px solid #FF4B4B;
+        background-color: transparent;
+        padding: 5px;
         text-align: center;
-        min-height: 40px;
+        min-height: 35px;
         color: #333;
     }
-    
     .selected-tag {
         display: inline-block;
         background-color: #FF4B4B;
         color: white !important;
         padding: 4px 10px;
-        margin: 3px;
+        margin: 2px;
         border-radius: 15px;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: bold;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
 
-    /* 太陽シミュレーションエリアのデザイン */
+    /* 太陽シミュレーションエリア */
     .sun-card {
         background-color: #f0f8ff;
         padding: 15px;
@@ -129,7 +130,6 @@ st.markdown("""
         font-weight: bold;
         text-align: center;
         margin-top: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -158,7 +158,7 @@ if not check_password():
     st.stop()
 
 # ==========================================
-# API & ツール関数
+# API & ツール
 # ==========================================
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -172,7 +172,6 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
-# 座標データ
 CITIES = {
     "東京": {"lat": 35.6895, "lon": 139.6917},
     "大阪": {"lat": 34.6937, "lon": 135.5023},
@@ -207,10 +206,6 @@ def clear_tags():
     st.session_state['selected_tags'] = []
 
 def create_grid(items, cols=4):
-    """
-    PC: 4列
-    スマホ: CSSで幅50%に強制され、gapが0になるため「2列 x 2行」に折り返される
-    """
     for i in range(0, len(items), cols):
         columns = st.columns(cols)
         for j, col in enumerate(columns):
@@ -222,23 +217,26 @@ def create_grid(items, cols=4):
 # ==========================================
 # 画面構成
 # ==========================================
-st.markdown("<h3 style='text-align: center; margin:0;'>🇯🇵 Video Planner & Sun</h3>", unsafe_allow_html=True)
 
-# --- 🛒 バケツエリア ---
+# --- 🛒 バケツエリア (画面固定) ---
+st.markdown('<div class="tag-container-wrapper">', unsafe_allow_html=True)
+st.markdown("<h5 style='text-align: center; margin:0; padding:0;'>🇯🇵 Video Planner</h5>", unsafe_allow_html=True)
+
 if st.session_state['selected_tags']:
     tags_html = "".join([f'<span class="selected-tag">{tag}</span>' for tag in st.session_state['selected_tags']])
     st.markdown(f'<div class="tag-container">{tags_html}</div>', unsafe_allow_html=True)
-    if st.button("🗑️ 選択リセット", use_container_width=True):
+    if st.button("🗑️ 選択リセット", use_container_width=True, key="reset_top"):
         clear_tags()
         st.rerun()
 else:
-    st.markdown("<div class='tag-container' style='color:#999; font-size:12px; padding-top:10px;'>スタンプを押すとここに追加されます</div>", unsafe_allow_html=True)
+    st.markdown("<div class='tag-container' style='color:#999; font-size:11px; padding-top:5px;'>👇 スタンプを押すとここに追加されます</div>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # --- メインタブ ---
 main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"])
 
 # ----------------------------------
-# タブ1: プラン作成（スタンプ）
+# タブ1: プラン作成
 # ----------------------------------
 with main_tab1:
     sub_t1, sub_t2, sub_t3 = st.tabs(["✨ 雰囲気", "📍 ロケ地", "🕒 時間"])
@@ -327,18 +325,43 @@ with main_tab1:
 
                     for i, spot in enumerate(spots, 1):
                         save_text += f"[{i}] {spot['name']}\n ポイント: {spot['reason']}\n 脚本: {spot['script']}\n MAP: {spot['search_name']}\n\n"
+                        
+                        # --- カード表示 ---
                         with st.expander(f"📍 {spot['name']}", expanded=False):
+                            # --- 復活・追加したアクションボタン ---
+                            st.caption("👇 アクション")
+                            b1, b2, b3 = st.columns(3)
+                            
+                            # URLエンコード用の準備
+                            q_map = spot['search_name'].replace(" ", "+")
+                            url_map = f"https://www.google.com/maps/search/?api=1&query={q_map}"
+                            url_img = f"https://www.google.com/search?q={q_map}&tbm=isch"
+                            url_dir = f"https://www.google.com/maps/dir/?api=1&destination={q_map}"
+                            
+                            with b1:
+                                st.link_button("📍 マップ", url_map, use_container_width=True)
+                            with b2:
+                                st.link_button("📷 画像検索", url_img, use_container_width=True) # これを追加
+                            with b3:
+                                st.link_button("🚶‍♂️ ナビ", url_dir, use_container_width=True)
+                                
+                            st.markdown("---")
+
+                            # 許可情報
                             perm = spot['permission']
                             if "禁止" in perm or "許可" in perm: st.error(f"⚠️ {perm}")
                             else: st.caption(f"ℹ️ {perm}")
-                            t1, t2 = st.tabs(["🎥 構成・脚本", "👗 服装・地図"])
+                            
+                            # 詳細情報タブ
+                            t1, t2 = st.tabs(["🎥 構成・脚本", "👗 服装・SNS"])
                             with t1:
                                 st.info(f"**{spot['video_idea']}**")
+                                st.markdown("**脚本:**")
                                 st.code(spot['script'], language="text")
                             with t2:
-                                st.write(f"👗 {spot['fashion']}")
-                                q = spot['search_name'].replace(" ", "+")
-                                st.link_button("📍 Googleマップ", f"https://www.google.com/maps/search/?api=1&query={q}", use_container_width=True)
+                                st.write(f"👗 **Fashion:** {spot['fashion']}")
+                                st.write(f"🎵 **BGM:** {spot['bgm']}")
+                                st.code(spot['sns_info'], language="text")
 
                     st.download_button("📥 テキスト保存", save_text, "plan.txt", use_container_width=True)
 
