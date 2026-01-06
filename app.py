@@ -14,7 +14,7 @@ load_dotenv()
 st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整 (スマホ配列 強制修正版)
+# 🎨 デザイン調整 (スマホ配列 完全強制版)
 # ==========================================
 st.markdown("""
     <style>
@@ -29,46 +29,53 @@ st.markdown("""
         padding-right: 0.2rem !important;
     }
 
-    /* ★重要: スマホでの横並び強制 (CSS Grid Hack)★ 
-       タブパネル内(data-baseweb="tab-panel")にあるカラム(column)に対してのみ適用
-       入力フォーム等は崩れないように除外
+    /* ★最重要: スマホでの強制横並びハック★ 
+       Streamlitのデフォルトの「スマホは縦並び」という仕様をmin-width: 0で無効化します
     */
-    @media (max-width: 640px) {
-        div[data-baseweb="tab-panel"] div[data-testid="column"] {
-            width: 33.33% !important;   /* 3列強制 */
-            flex: 0 0 33.33% !important;
-            max-width: 33.33% !important;
-            min-width: 33.33% !important;
-            padding: 0 1px !important;  /* 隙間を極限まで詰める */
+    @media only screen and (max-width: 768px) {
+        /* 横並びコンテナ（行）の設定: 強制的に横向き(row)にする */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 4px !important; /* ボタン間の隙間を少し詰める */
         }
         
-        /* ボタン内の文字サイズを小さくして収める */
-        div[data-baseweb="tab-panel"] .stButton > button {
+        /* カラム（列）の設定: 幅を強制的に縮める */
+        [data-testid="column"] {
+            flex: 1 1 0 !important; /* 均等に縮小・拡大 */
+            width: auto !important;
+            min-width: 0px !important; /* ★これが縦並びを防ぐカギ★ */
+        }
+        
+        /* スマホ時のボタン文字サイズ調整 */
+        .stButton > button {
             font-size: 10px !important;
             padding: 2px !important;
-            min-height: 40px !important;
+            min-height: 45px !important;
             height: 100% !important;
-            line-height: 1.1 !important;
+            line-height: 1.2 !important;
+            white-space: normal !important; /* 文字折り返しあり */
         }
     }
 
+    /* --- PC・共通デザイン --- */
+    
     /* ボタン共通デザイン */
     .stButton > button {
         width: 100% !important;
-        border-radius: 6px !important;
+        border-radius: 8px !important;
         min-height: 3rem;
         height: auto;
         font-weight: bold !important;
-        white-space: normal !important;
         
-        /* 色指定 */
+        /* 色指定: 白背景・黒文字で見やすく */
         background-color: #ffffff !important;
         color: #262730 !important;
         border: 1px solid #d0d7de !important;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
     
-    /* ホバー・アクティブ時 */
+    /* ボタンを押したときの反応 */
     .stButton > button:active, .stButton > button:focus:not(:active) {
         background-color: #FF4B4B !important;
         color: #ffffff !important;
@@ -94,7 +101,7 @@ st.markdown("""
         padding: 2px 8px;
         margin: 2px;
         border-radius: 10px;
-        font-size: 10px;
+        font-size: 11px;
         font-weight: bold;
     }
 
@@ -176,7 +183,6 @@ def get_sun_data(lat, lon, date_str):
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=sunrise,sunset&timezone=Asia%2FTokyo&start_date={date_str}&end_date={date_str}"
         r = requests.get(url)
         data = r.json()
-        
         sunrise = data['daily']['sunrise'][0].split("T")[1]
         sunset = data['daily']['sunset'][0].split("T")[1]
         return sunrise, sunset
@@ -195,7 +201,7 @@ def clear_tags():
     st.session_state['selected_tags'] = []
 
 def create_grid(items, cols=3):
-    # CSSで強制3列にしているため、ここでは単純にcolumnsをループさせる
+    # CSSで行(row)と列(col)を制御するため、通常通りst.columnsを使用
     for i in range(0, len(items), cols):
         columns = st.columns(cols)
         for j, col in enumerate(columns):
@@ -305,7 +311,6 @@ with main_tab1:
                     
                     st.success("✅ プラン作成完了")
                     
-                    # 保存用テキスト
                     save_text = f"【撮影プラン】\nエリア: {area_query}\nテーマ: {final_query}\n\n"
                     
                     df = pd.DataFrame(spots)
@@ -333,7 +338,7 @@ with main_tab1:
                     st.write(e)
 
 # ----------------------------------
-# タブ2: 太陽シミュレーション (新機能)
+# タブ2: 太陽シミュレーション
 # ----------------------------------
 with main_tab2:
     st.markdown("##### ☀️ Sun Tracker")
@@ -353,11 +358,10 @@ with main_tab2:
         sunrise, sunset = get_sun_data(lat, lon, date_str)
         
         if sunrise and sunset:
-            # 時間計算処理
             sr_h, sr_m = map(int, sunrise.split(":"))
             ss_h, ss_m = map(int, sunset.split(":"))
             
-            # マジックアワー（日の入り前後30分と仮定）
+            # マジックアワー計算
             golden_start = f"{ss_h}:{(ss_m - 30):02d}" if ss_m >= 30 else f"{ss_h-1}:{(ss_m + 30):02d}"
             golden_end = f"{ss_h}:{(ss_m + 15):02d}" if ss_m + 15 < 60 else f"{ss_h+1}:{(ss_m + 15 - 60):02d}"
             
@@ -378,12 +382,10 @@ with main_tab2:
             </div>
             """, unsafe_allow_html=True)
             
-            # 簡易的な方角ガイド
             st.info("🧭 **太陽の方角ガイド**\n\n"
                     f"・ **{sunrise}頃**: 東から昇ります\n"
                     "・ **10:00頃**: 南東 (順光で撮るなら北西向き)\n"
                     "・ **14:00頃**: 南西 (サイド光が良い感じ)\n"
                     f"・ **{sunset}頃**: 西に沈みます (逆光シルエットのチャンス)")
-            
         else:
-            st.error("データの取得に失敗しました。ネット環境を確認してください。")
+            st.error("データの取得に失敗しました。")
