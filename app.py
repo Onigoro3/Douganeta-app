@@ -184,7 +184,7 @@ if not API_KEY:
     st.stop()
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash-exp') 
+model = genai.GenerativeModel('gemini-2.5-flash') 
 
 CITIES = {
     "東京": {"lat": 35.6895, "lon": 139.6917},
