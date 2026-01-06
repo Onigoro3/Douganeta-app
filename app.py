@@ -5,8 +5,9 @@ import json
 import pandas as pd
 import requests
 import datetime
-import re  # 正規表現用に追加
+import re
 from dotenv import load_dotenv
+import urllib.parse # URLエンコード用
 
 # --- 設定の読み込み ---
 load_dotenv()
@@ -15,16 +16,16 @@ load_dotenv()
 st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整 (固定ヘッダー修正 & 配色改善)
+# 🎨 デザイン調整 (外部リンクボタン & 固定ヘッダー)
 # ==========================================
 st.markdown("""
     <style>
     /* ヘッダー・フッター削除 */
     header[data-testid="stHeader"], footer {display: none !important;}
     
-    /* 全体の余白調整 (固定ヘッダーの分だけ上を空ける) */
+    /* 全体の余白調整 */
     .block-container {
-        padding-top: 140px !important; /* バケツとタブの高さ分 */
+        padding-top: 140px !important;
         padding-bottom: 5rem !important;
         padding-left: 0.2rem !important;
         padding-right: 0.2rem !important;
@@ -37,14 +38,13 @@ st.markdown("""
         left: 0;
         right: 0;
         z-index: 9999;
-        background-color: rgba(30, 30, 30, 0.95); /* 背景を濃い色に */
+        background-color: rgba(30, 30, 30, 0.95);
         backdrop-filter: blur(10px);
         padding: 10px 5px 5px 5px;
         border-bottom: 1px solid #444;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     
-    /* バケツ内のタグデザイン */
     .tag-container {
         text-align: center;
         min-height: 30px;
@@ -62,29 +62,50 @@ st.markdown("""
         box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
 
-    /* ★タブのデザイン改善 (文字色を強制指定) ★ */
-    /* タブのコンテナも固定ヘッダーの一部として扱うための位置調整は難しいので、
-       今回はバケツのみを完全固定し、タブは見やすさ優先で配置します */
-       
+    /* ★外部リンク用カスタムボタンのデザイン★ */
+    .custom-link-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        font-weight: bold;
+        color: #262730;
+        background-color: #ffffff;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        text-decoration: none !important; /* 下線を消す */
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        transition: all 0.2s;
+        font-size: 14px;
+        height: 40px;
+    }
+    .custom-link-btn:hover {
+        border-color: #FF4B4B;
+        color: #FF4B4B;
+        background-color: #f0f2f6;
+    }
+    .custom-link-btn:active {
+        transform: scale(0.98);
+        background-color: #FF4B4B;
+        color: white;
+    }
+
+    /* タブのデザイン改善 */
     div[data-baseweb="tab-list"] {
         background-color: transparent !important;
         margin-bottom: 10px;
     }
-    
-    /* タブのボタン文字色 */
     button[data-baseweb="tab"] {
-        color: #cccccc !important; /* 未選択は薄いグレー */
+        color: #cccccc !important;
         font-weight: bold !important;
         background-color: transparent !important;
     }
-    
-    /* 選択中のタブ */
     button[data-baseweb="tab"][aria-selected="true"] {
-        color: #FF4B4B !important; /* 選択中は赤 */
+        color: #FF4B4B !important;
         border-bottom-color: #FF4B4B !important;
     }
-    
-    /* タブのハイライトバー */
     div[data-baseweb="tab-highlight"] {
         background-color: #FF4B4B !important;
     }
@@ -131,10 +152,9 @@ st.markdown("""
         border-color: #FF4B4B !important;
         transform: scale(0.98);
     }
-    
-    /* 太陽シミュエリア */
+
     .sun-card {
-        background-color: #262730; /* ダークモード対応 */
+        background-color: #262730;
         padding: 15px;
         border-radius: 12px;
         border: 1px solid #444;
@@ -239,7 +259,6 @@ def create_grid(items, cols=4):
 # ==========================================
 
 # --- 🛒 バケツエリア (固定表示) ---
-# コンテナを使わず、HTML/CSSで直接描画して固定する
 header_html = f"""
 <div class="sticky-header">
     <div style="text-align:center; color:white; font-size:14px; margin-bottom:5px;">🇯🇵 Video Planner</div>
@@ -257,9 +276,6 @@ header_html += """
 """
 st.markdown(header_html, unsafe_allow_html=True)
 
-# 固定ヘッダーのリセットボタン用（HTML内にはボタンを埋め込めないので、透明なエリアを作る等のハックが必要だが、
-# 簡略化のため、画面上部にリセットボタンだけ別途配置するか、タブ内に配置する）
-
 # --- メインタブ ---
 main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"])
 
@@ -267,7 +283,6 @@ main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"
 # タブ1: プラン作成
 # ----------------------------------
 with main_tab1:
-    # バケツリセットボタンをここに配置（押しやすい位置）
     if st.button("🗑️ 選択タグをリセット", use_container_width=True):
         clear_tags()
         st.rerun()
@@ -340,7 +355,7 @@ with main_tab1:
                     スタイル: {style}
                     
                     動画撮影スポットを5つ提案。
-                    **必ず以下のJSONフォーマットのみを出力してください。** 余計な挨拶やマークダウン(```json等)は不要です。
+                    **必ず以下のJSONフォーマットのみを出力してください。**
                     
                     [
                         {{
@@ -360,14 +375,11 @@ with main_tab1:
                     response = model.generate_content(prompt)
                     text_resp = response.text.strip()
                     
-                    # --- JSON抽出ロジックの強化 ---
-                    # 1. マークダウンの ```json ... ``` を削除
                     if text_resp.startswith("```json"):
                         text_resp = text_resp[7:-3]
                     elif text_resp.startswith("```"):
                         text_resp = text_resp[3:-3]
                     
-                    # 2. 正規表現で [ ... ] の部分だけを無理やり抜き出す
                     match = re.search(r'\[.*\]', text_resp, re.DOTALL)
                     if match:
                         json_str = match.group(0)
@@ -376,24 +388,31 @@ with main_tab1:
                         st.success("✅ プラン作成完了")
                         save_text = f"【撮影プラン】\nエリア: {area_query}\nテーマ: {final_query}\n\n"
                         
-                        # データフレーム作成用（緯度経度はAIが不安定なので今回は省略または別途取得推奨だが、簡易的に表示）
-                        # エラー回避のため地図は一旦ボタンリンクに任せる
-                        
                         for i, spot in enumerate(spots, 1):
                             save_text += f"[{i}] {spot['name']}\n ポイント: {spot['reason']}\n 脚本: {spot['script']}\n MAP: {spot['search_name']}\n\n"
                             
                             with st.expander(f"📍 {spot['name']}", expanded=False):
-                                st.caption("👇 アクション")
+                                st.caption("👇 アクション (アプリで開きます)")
                                 b1, b2, b3 = st.columns(3)
                                 
-                                q_map = spot['search_name'].replace(" ", "+")
-                                url_map = f"[https://www.google.com/maps/search/?api=1&query=](https://www.google.com/maps/search/?api=1&query=){q_map}"
-                                url_img = f"[https://www.google.com/search?q=](https://www.google.com/search?q=){q_map}&tbm=isch"
-                                url_dir = f"[https://www.google.com/maps/dir/?api=1&destination=](https://www.google.com/maps/dir/?api=1&destination=){q_map}"
+                                # URLエンコードしてリンク生成
+                                q_raw = spot['search_name']
+                                q_enc = urllib.parse.quote(q_raw)
                                 
-                                with b1: st.link_button("📍 マップ", url_map, use_container_width=True)
-                                with b2: st.link_button("📷 画像検索", url_img, use_container_width=True)
-                                with b3: st.link_button("🚶‍♂️ ナビ", url_dir, use_container_width=True)
+                                # Google Maps (アプリ起動用ユニバーサルリンク)
+                                url_map = f"https://www.google.com/maps/search/?api=1&query={q_enc}"
+                                # 画像検索
+                                url_img = f"https://www.google.com/search?q={q_enc}&tbm=isch"
+                                # ルート案内
+                                url_dir = f"https://www.google.com/maps/dir/?api=1&destination={q_enc}"
+                                
+                                # HTMLリンクボタンを作成して埋め込む
+                                with b1:
+                                    st.markdown(f'<a href="{url_map}" target="_blank" rel="noopener noreferrer" class="custom-link-btn">📍 マップ</a>', unsafe_allow_html=True)
+                                with b2:
+                                    st.markdown(f'<a href="{url_img}" target="_blank" rel="noopener noreferrer" class="custom-link-btn">📷 画像</a>', unsafe_allow_html=True)
+                                with b3:
+                                    st.markdown(f'<a href="{url_dir}" target="_blank" rel="noopener noreferrer" class="custom-link-btn">🚶‍♂️ ナビ</a>', unsafe_allow_html=True)
                                     
                                 st.markdown("---")
                                 perm = spot.get('permission', '要確認')
@@ -413,8 +432,7 @@ with main_tab1:
                         st.download_button("📥 テキスト保存", save_text, "plan.txt", use_container_width=True)
                     
                     else:
-                        st.error("AIからの応答形式が不正でした。もう一度お試しください。")
-                        st.write("Raw response:", text_resp) # デバッグ用
+                        st.error("AIデータの読み取りに失敗しました。再試行してください。")
 
                 except Exception as e:
                     st.error(f"エラーが発生しました: {e}")
