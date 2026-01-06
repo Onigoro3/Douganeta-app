@@ -6,161 +6,169 @@ import pandas as pd
 from dotenv import load_dotenv
 
 # --- 設定の読み込み ---
-# ローカル開発用（.envファイルがある場合）
 load_dotenv()
 
 # --- ページ設定 ---
-st.set_page_config(page_title="東京動画ネタ帳 Ultimate Studio", layout="wide")
+st.set_page_config(page_title="東京動画ネタ帳 Ultimate", layout="wide")
 
 # ==========================================
-# 🔐 簡易ログイン機能 (ここを追加)
+# 🎨 デザイン調整 (CSS注入)
+# ==========================================
+st.markdown("""
+    <style>
+    /* 1. 上部のバー（ヘッダー）とフッターを消す */
+    [data-testid="stHeader"] {
+        display: none;
+    }
+    footer {
+        visibility: hidden;
+    }
+    
+    /* 2. スマホ向け: 全体の余白をギュッと詰める */
+    .block-container {
+        padding-top: 1rem;     /* 上の隙間をなくす */
+        padding-bottom: 5rem;  /* 下はスクロール用に少し空ける */
+        padding-left: 0.5rem;  /* 横の隙間も最小限に */
+        padding-right: 0.5rem;
+    }
+    
+    /* 3. ボタンをスマホで押しやすく（高さを出して太字に） */
+    .stButton button {
+        min-height: 50px;
+        font-weight: bold;
+        border-radius: 12px; /* 角丸でアプリっぽく */
+    }
+
+    /* 4. タブの文字を大きく */
+    button[data-baseweb="tab"] {
+        font-size: 16px;
+        padding: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 🔐 簡易ログイン機能
 # ==========================================
 def check_password():
-    """パスワードが合っているか確認する関数"""
-    # 1. セッション状態にログインフラグがなければFalseにする
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = False
 
-    # 2. すでにログイン済みなら何もしない
     if st.session_state['logged_in']:
         return True
 
-    # 3. ログイン画面の表示
     st.header("🔒 ログイン")
-    st.write("このアプリは関係者専用です。パスワードを入力してください。")
-    
     password = st.text_input("パスワード", type="password")
     
-    # 4. パスワード照合
-    # Streamlit CloudのSecrets機能、または環境変数から正解パスワードを取得
-    # 設定がない場合のデフォルトは 'admin123' (本番では必ず変更してください)
+    # Secretsまたは環境変数からパスワード取得
     correct_password = os.getenv("APP_PASSWORD") or st.secrets.get("APP_PASSWORD") or "admin123"
 
-    if st.button("ログイン"):
+    if st.button("ログイン", use_container_width=True):
         if password == correct_password:
             st.session_state['logged_in'] = True
-            st.rerun() # 画面を再読み込みしてアプリを表示
+            st.rerun()
         else:
             st.error("パスワードが違います")
-    
     return False
 
-# パスワードチェック実行。ログインしていなければここで処理を止める（アプリの中身を見せない）
 if not check_password():
     st.stop()
 
 # ==========================================
-# 以下、ログイン成功後のアプリ本体
+# アプリ本体
 # ==========================================
 
-# --- APIキーの取得優先順位: 1.Secrets(クラウド) 2.環境変数(.env) ---
-# Streamlit Cloudでは st.secrets を使うのが一般的です
+# APIキー取得
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
     API_KEY = os.getenv("GEMINI_API_KEY")
 
-# --- Gemini APIの設定 ---
 if not API_KEY:
-    st.error("APIキーが設定されていません。")
+    st.error("APIキー設定エラー")
     st.stop()
 
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
-# --- セッション状態の初期化 ---
+# セッション初期化
 if 'search_query' not in st.session_state:
     st.session_state['search_query'] = ""
 
 def set_query(text):
     st.session_state['search_query'] = text
 
-# --- UIヘッダー ---
-st.title("🎬 東京動画ネタ帳: Ultimate Studio")
-st.markdown("ロケ地、脚本、そして**「衣装・BGM・ハッシュタグ」**まで。AIがトータルプロデュースします。")
+# タイトル（スマホでも見やすく短縮）
+st.title("🎬 Tokyo Location Guide")
+st.caption("AIがロケ地・脚本・衣装・タグを完全プロデュース")
 
-# --- 🎨 ビジュアルスタンプエリア ---
-st.markdown("### 1. 撮りたい画から選ぶ")
+# --- スタンプエリア ---
+st.markdown("### 1. イメージ選択")
 
-tab1, tab2, tab3 = st.tabs(["🕒 時間帯・天気", "✨ 雰囲気・感情", "🏙️ 場所・建物"])
+tab1, tab2, tab3 = st.tabs(["🕒 時間/天気", "✨ 雰囲気", "🏙️ 場所"])
 
 with tab1:
-    c1, c2, c3, c4 = st.columns(4)
-    if c1.button("🌅 早朝の静寂", use_container_width=True): set_query("人がいない早朝の東京、朝日が差し込むビル街や公園、澄んだ空気")
-    if c2.button("🌇 夕暮れ・マジックアワー", use_container_width=True): set_query("夕日が沈む直前の空、シルエットが美しい場所、オレンジ色の街並み")
-    if c3.button("🌃 真夜中の孤独", use_container_width=True): set_query("深夜の誰もいない道路、街灯だけが光る場所、孤独感のある都会")
-    if c4.button("☔ 雨の日のリフレクション", use_container_width=True): set_query("雨で濡れた地面にネオンが反射する場所、ガラス越しの雨粒")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("🌅 早朝", use_container_width=True): set_query("早朝の東京、朝日、静寂、澄んだ空気")
+        if st.button("🌃 深夜", use_container_width=True): set_query("深夜の道路、街灯、孤独感、誰もいない都会")
+    with c2:
+        if st.button("🌇 夕暮れ", use_container_width=True): set_query("夕焼け、マジックアワー、シルエット、オレンジ色の空")
+        if st.button("☔ 雨の日", use_container_width=True): set_query("雨の路面反射、ガラス越しの雨粒、ネオン、濡れた質感")
 
 with tab2:
-    c1, c2, c3, c4 = st.columns(4)
-    if c1.button("☕ チル・落ち着く", use_container_width=True): set_query("風の音が聞こえるような静かな場所、緑とベンチがある場所、リラックスできる風景")
-    if c2.button("🎞️ ノスタルジック", use_container_width=True): set_query("昭和レトロな路地裏、錆びた看板、時間が止まったような懐かしい場所")
-    if c3.button("🤖 サイバーパンク", use_container_width=True): set_query("近未来的な構造物、複雑なパイプや電線、LEDの光、ブレードランナーのような雰囲気")
-    if c4.button("🍃 廃墟・退廃美", use_container_width=True): set_query("植物に侵食された人工物、古びたコンクリート、少し不気味だが美しい場所")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("☕ チル", use_container_width=True): set_query("風の音、緑とベンチ、リラックス、静かな公園")
+        if st.button("🤖 近未来", use_container_width=True): set_query("サイバーパンク、LED、電線、ブレードランナー風")
+    with c2:
+        if st.button("🎞️ レトロ", use_container_width=True): set_query("昭和レトロ、路地裏、錆びた看板、ノスタルジー")
+        if st.button("🍃 廃墟感", use_container_width=True): set_query("植物に侵食された壁、古びたコンクリート、退廃美")
 
 with tab3:
-    c1, c2, c3, c4 = st.columns(4)
-    if c1.button("⛩️ 神社・仏閣", use_container_width=True): set_query("静寂に包まれた境内、木漏れ日、石畳、日本的な美しさ")
-    if c2.button("🏭 工場・インダストリアル", use_container_width=True): set_query("巨大な鉄骨、煙突、メカニカルな構造美、夜の工場地帯")
-    if c3.button("🌉 橋・水辺", use_container_width=True): set_query("川沿いの遊歩道、巨大な橋の下、水面に映る街の光")
-    if c4.button("🚈 電車・高架下", use_container_width=True): set_query("電車の通過音が響く高架下、線路沿いの小道、踏切のある風景")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("⛩️ 神社", use_container_width=True): set_query("静寂な境内、石畳、木漏れ日、和の雰囲気")
+        if st.button("🌉 水辺", use_container_width=True): set_query("川沿いの遊歩道、橋の下、水面反射")
+    with c2:
+        if st.button("🏭 工場", use_container_width=True): set_query("鉄骨、パイプ、インダストリアル、夜の工場")
+        if st.button("🚈 電車", use_container_width=True): set_query("高架下、線路沿い、踏切、電車の通過音")
 
-# --- 検索フォーム ---
+# --- 入力エリア ---
 st.markdown("---")
-st.markdown("### 2. 撮影スタイルとテーマを決める")
+st.markdown("### 2. スタイル設定")
 
 with st.form(key='search_form'):
-    # 人数・スタイル選択
     style = st.radio(
-        "撮影人数・スタイル",
-        ["👤 一人で撮影 (Vlog・自撮り・風景)", "👥 複数人で撮影 (演者あり・会話劇・デート風)"],
+        "人数",
+        ["👤 一人 (Vlog/風景)", "👥 複数 (会話劇/MV)"],
         horizontal=True
     )
     
-    theme = st.text_input("検索テーマ（スタンプを押すと自動入力）", value=st.session_state['search_query'])
-    submit_button = st.form_submit_button(label='🚀 トータルプランを作成')
+    theme = st.text_input("テーマ (自動入力)", value=st.session_state['search_query'])
+    
+    # スマホで一番目立つようにメインボタンを配置
+    submit_button = st.form_submit_button(label='🚀 プランを作成する', type="primary", use_container_width=True)
 
-# --- 処理実行 ---
+# --- 結果表示 ---
 if submit_button and theme:
     st.session_state['search_query'] = theme
     
-    with st.spinner('ロケ地、脚本、衣装、音楽、SNS戦略を構築中...'):
+    with st.spinner('AIプロデューサーが思考中...'):
         try:
-            # プロンプト
             prompt = f"""
             ユーザーのテーマ「{theme}」に基づき、東京の撮影スポットを5つ提案してください。
-            【現在の撮影スタイル】: {style}
-            【必須要件】
-            1. lat/lon: アプリ内地図用（必須）。
-            2. search_name: Googleマップ検索用の正確な名称。
-            3. permission: 撮影許可の目安。
-            4. video_idea: カメラワークや構図の提案。
-            5. script: {style} に合わせた短い脚本・演出指示。
-            6. fashion: その場所の雰囲気に合うおすすめの服装・ファッション。
-            7. bgm: 編集時に合わせるべきBGMのジャンルや雰囲気。
-            8. sns_tags: TikTok/Reels投稿用のバズりそうなハッシュタグ5〜6個と、キャッチーなタイトル案。
-
-            以下のJSONフォーマットのみを返してください。
-            [
-                {{
-                    "name": "スポット名",
-                    "search_name": "Googleマップ検索用の正確な名称",
-                    "area": "エリア名",
-                    "reason": "撮影ポイント解説",
-                    "permission": "⚠️ 許可・注意点の目安",
-                    "video_idea": "🎥 カメラワーク案",
-                    "script": "📝 脚本・セリフ・演出指示",
-                    "fashion": "👗 おすすめファッション",
-                    "bgm": "🎵 推奨BGM",
-                    "sns_info": "📱 SNSタイトル案とハッシュタグ",
-                    "lat": 35.xxxxxx,
-                    "lon": 139.xxxxxx
-                }}
-            ]
+            スタイル: {style}
+            
+            JSON形式で以下を含めてください:
+            name, search_name(GoogleMap用), area, reason, permission(許可目安), 
+            video_idea(構成案), script(短い脚本), fashion(服装), bgm(音楽), 
+            sns_info(タグとタイトル), lat, lon
             """
 
             response = model.generate_content(prompt)
             
+            # JSONクリーニング処理
             text_response = response.text.strip()
             if text_response.startswith("```json"):
                 text_response = text_response[7:-3]
@@ -169,48 +177,49 @@ if submit_button and theme:
             
             spots = json.loads(text_response)
 
-            st.success(f"📍 「{theme}」の撮影プラン")
+            st.success("✅ プラン作成完了")
+            
+            # 地図
             df = pd.DataFrame(spots)
             st.map(df, latitude='lat', longitude='lon', size=20, color='#FF4B4B')
 
-            st.markdown("### 📋 撮影＆演出指示書")
+            # 詳細カード
             for spot in spots:
-                with st.expander(f"📍 {spot['name']} （{spot['area']}）", expanded=True):
-                    perm_text = spot['permission']
-                    if "禁止" in perm_text or "許可" in perm_text or "私有地" in perm_text:
-                        st.error(f"**{perm_text}**")
+                with st.expander(f"📍 {spot['name']}", expanded=False):
+                    
+                    # 許可アラート
+                    perm = spot['permission']
+                    if "禁止" in perm or "許可" in perm:
+                        st.error(f"⚠️ {perm}")
                     else:
-                        st.warning(f"**{perm_text}**")
+                        st.caption(f"ℹ️ {perm}")
 
-                    c1, c2, c3 = st.columns([1.2, 1.2, 0.6])
+                    # タブで情報を整理（スマホで見やすく）
+                    t1, t2, t3 = st.tabs(["🎥 構成・演出", "👗 衣装・SNS", "🗺️ マップ"])
                     
-                    with c1:
-                        st.markdown(f"**💬 ポイント:** {spot['reason']}")
-                        st.info(f"**🎥 構成案:**\n{spot['video_idea']}")
-                        st.markdown("---")
-                        st.markdown(f"**👗 服装:** {spot['fashion']}")
-                        st.markdown(f"**🎵 BGM:** {spot['bgm']}")
-                    
-                    with c2:
-                        st.markdown("#### 📝 Scenario")
+                    with t1:
+                        st.markdown(f"**Point:** {spot['reason']}")
+                        st.info(f"**構成:** {spot['video_idea']}")
+                        st.markdown("**📝 脚本:**")
                         st.code(spot['script'], language="text")
-                        st.markdown("#### 📱 SNS Posting")
+
+                    with t2:
+                        st.markdown(f"**👗:** {spot['fashion']}")
+                        st.markdown(f"**🎵:** {spot['bgm']}")
+                        st.markdown("**📱 SNS:**")
                         st.code(spot['sns_info'], language="text")
-                    
-                    with c3:
-                        map_query = spot['search_name'].replace(" ", "+")
-                        google_map_url = f"https://www.google.com/maps/search/?api=1&query={map_query}"
-                        dir_url = f"https://www.google.com/maps/dir/?api=1&destination={map_query}"
+
+                    with t3:
+                        q = spot['search_name'].replace(" ", "+")
+                        map_url = f"https://www.google.com/maps/search/?api=1&query={q}"
+                        dir_url = f"https://www.google.com/maps/dir/?api=1&destination={q}"
                         
-                        st.link_button("📍 マップ保存", google_map_url, type="primary", use_container_width=True)
-                        st.link_button("🚶‍♂️ 経路案内", dir_url, use_container_width=True)
-                        
-                        img_search_url = f"https://www.google.com/search?q={map_query}+風景&tbm=isch"
-                        st.markdown(f"[🖼️ 参考写真]({img_search_url})")
+                        st.link_button("📍 Googleマップを開く", map_url, type="primary", use_container_width=True)
+                        st.link_button("🚶‍♂️ ここへ行く（ナビ）", dir_url, use_container_width=True)
 
         except Exception as e:
-            st.error(f"エラーが発生しました: {e}")
-            st.info("もう一度ボタンを押してみてください。")
+            st.error("エラーが発生しました。もう一度お試しください。")
+            st.caption(f"Error: {e}")
 
 elif submit_button and not theme:
-    st.warning("スタンプを選ぶか、テーマを入力してください。")
+    st.warning("テーマを入力してください")
