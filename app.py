@@ -124,17 +124,20 @@ def fetch_google_images(query_keywords):
     """
     url = "https://www.googleapis.com/customsearch/v1"
     
-    # 検索クエリの作成: 場所名 + 雰囲気ワード + "風景 実写"
-    q = f"{query_keywords} 風景 実写 -イラスト -アニメ -スイーツ -食べ物 -カフェ"
+    # 検索クエリの作成: 
+    # 1. ユーザーのキーワードを入れる
+    # 2. "scenery street" (風景) を追加
+    # 3. "-food -sweets -anime" (ノイズ) を除外
+    q = f"{query_keywords} scenery street photography -food -sweets -cake -menu -anime -illustration -poster"
     
     params = {
         "q": q,
         "cx": st.secrets["GOOGLE_CSE_ID"],
         "key": st.secrets["GOOGLE_CSE_KEY"],
         "searchType": "image",
-        "num": 2,           # 取得枚数 (少なくして高速化)
+        "num": 2,           # 取得枚数
         "imgType": "photo", # 実写のみ
-        "gl": "jp",         # 日本
+        "gl": "jp",         # 日本の検索結果
         "safe": "off"
     }
     try:
@@ -182,7 +185,7 @@ def render_spot_result(spot, index, extra_keywords=""):
         q_enc = urllib.parse.quote(f"{spot['name']} {extra_keywords}")
         c1, c2, c3 = st.columns(3)
         with c1: st.markdown(f'<a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(spot["name"])}" target="_blank" class="custom-link-btn">📍MAP</a>', unsafe_allow_html=True)
-        with c2: st.markdown(f'<a href="https://www.google.com/search?q={q_enc}&tbm=isch" target="_blank" class="custom-link-btn">📷写真</a>', unsafe_allow_html=True)
+        with c2: st.markdown(f'<a href="https://www.google.com/search?q={q_enc}+scenery&tbm=isch" target="_blank" class="custom-link-btn">📷写真</a>', unsafe_allow_html=True)
         with c3: st.markdown(f'<a href="https://www.google.com/search?q={q_enc}" target="_blank" class="custom-link-btn">🌐検索</a>', unsafe_allow_html=True)
         
         st.caption(f"💡 {spot.get('reason', '')}")
