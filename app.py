@@ -185,7 +185,7 @@ if not API_KEY:
 
 genai.configure(api_key=API_KEY)
 # 画像認識に対応した最新モデル
-model = genai.GenerativeModel('gemini-2.0-flash-exp') 
+model = genai.GenerativeModel('gemini-2.5-flash') 
 
 CITIES = {
     "東京": {"lat": 35.6895, "lon": 139.6917},
