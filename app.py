@@ -6,8 +6,9 @@ import pandas as pd
 import requests
 import datetime
 import re
+import urllib.parse
+from PIL import Image
 from dotenv import load_dotenv
-import urllib.parse # URLエンコード用
 
 # --- 設定の読み込み ---
 load_dotenv()
@@ -16,14 +17,12 @@ load_dotenv()
 st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整 (外部リンクボタン & 固定ヘッダー)
+# 🎨 CSSデザイン
 # ==========================================
 st.markdown("""
     <style>
-    /* ヘッダー・フッター削除 */
+    /* ヘッダー削除・余白調整 */
     header[data-testid="stHeader"], footer {display: none !important;}
-    
-    /* 全体の余白調整 */
     .block-container {
         padding-top: 140px !important;
         padding-bottom: 5rem !important;
@@ -31,7 +30,7 @@ st.markdown("""
         padding-right: 0.2rem !important;
     }
 
-    /* ★画面固定エリア (バケツ) ★ */
+    /* 固定ヘッダー */
     .sticky-header {
         position: fixed;
         top: 0;
@@ -44,7 +43,6 @@ st.markdown("""
         border-bottom: 1px solid #444;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    
     .tag-container {
         text-align: center;
         min-height: 30px;
@@ -59,10 +57,9 @@ st.markdown("""
         border-radius: 15px;
         font-size: 11px;
         font-weight: bold;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
 
-    /* ★外部リンク用カスタムボタンのデザイン★ */
+    /* 外部リンクボタン */
     .custom-link-btn {
         display: inline-flex;
         align-items: center;
@@ -75,10 +72,10 @@ st.markdown("""
         background-color: #ffffff;
         border: 1px solid #d0d7de;
         border-radius: 8px;
-        text-decoration: none !important; /* 下線を消す */
+        text-decoration: none !important;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         transition: all 0.2s;
-        font-size: 14px;
+        font-size: 13px;
         height: 40px;
     }
     .custom-link-btn:hover {
@@ -86,13 +83,8 @@ st.markdown("""
         color: #FF4B4B;
         background-color: #f0f2f6;
     }
-    .custom-link-btn:active {
-        transform: scale(0.98);
-        background-color: #FF4B4B;
-        color: white;
-    }
 
-    /* タブのデザイン改善 */
+    /* タブデザイン */
     div[data-baseweb="tab-list"] {
         background-color: transparent !important;
         margin-bottom: 10px;
@@ -110,7 +102,7 @@ st.markdown("""
         background-color: #FF4B4B !important;
     }
 
-    /* スマホレイアウト制御 (2列強制) */
+    /* スマホ2列強制 */
     @media (max-width: 768px) {
         [data-testid="stHorizontalBlock"] {
             flex-wrap: wrap !important;
@@ -129,47 +121,33 @@ st.markdown("""
             font-size: 11px !important;
             padding: 2px 4px !important;
             min-height: 42px !important;
-            height: 100% !important;
-            line-height: 1.2 !important;
         }
     }
 
-    /* ボタン共通デザイン */
+    /* 一般ボタン */
     .stButton > button {
         width: 100% !important;
         border-radius: 8px !important;
         min-height: 3.5rem;
-        height: auto;
         font-weight: bold !important;
         background-color: #ffffff !important;
         color: #262730 !important;
         border: 1px solid #d0d7de !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
-    .stButton > button:active, .stButton > button:focus:not(:active) {
+    .stButton > button:active {
         background-color: #FF4B4B !important;
         color: #ffffff !important;
         border-color: #FF4B4B !important;
-        transform: scale(0.98);
     }
-
-    .sun-card {
+    
+    /* カード類 */
+    .sun-card, .info-card {
         background-color: #262730;
         padding: 15px;
         border-radius: 12px;
         border: 1px solid #444;
         margin-bottom: 15px;
-        text-align: center;
         color: #fff;
-    }
-    .golden-hour {
-        background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
-        padding: 15px;
-        border-radius: 12px;
-        color: #a04000;
-        font-weight: bold;
-        text-align: center;
-        margin-top: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -178,10 +156,8 @@ st.markdown("""
 # 🔐 ログイン
 # ==========================================
 def check_password():
-    if 'logged_in' not in st.session_state:
-        st.session_state['logged_in'] = False
-    if st.session_state['logged_in']:
-        return True
+    if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
+    if st.session_state['logged_in']: return True
     st.markdown("### 🔐 Login")
     with st.form("login_form"):
         password = st.text_input("Password", type="password")
@@ -190,15 +166,13 @@ def check_password():
             if password == correct:
                 st.session_state['logged_in'] = True
                 st.rerun()
-            else:
-                st.error("パスワードが違います")
+            else: st.error("パスワードが違います")
     return False
 
-if not check_password():
-    st.stop()
+if not check_password(): st.stop()
 
 # ==========================================
-# API & ツール
+# API設定
 # ==========================================
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -210,7 +184,8 @@ if not API_KEY:
     st.stop()
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+# 画像認識に対応した最新モデル
+model = genai.GenerativeModel('gemini-2.0-flash-exp') 
 
 CITIES = {
     "東京": {"lat": 35.6895, "lon": 139.6917},
@@ -219,8 +194,6 @@ CITIES = {
     "札幌": {"lat": 43.0618, "lon": 141.3545},
     "福岡": {"lat": 33.5904, "lon": 130.4017},
     "那覇": {"lat": 26.2124, "lon": 127.6809},
-    "仙台": {"lat": 38.2682, "lon": 140.8694},
-    "名古屋": {"lat": 35.1815, "lon": 136.9066},
 }
 
 def get_sun_data(lat, lon, date_str):
@@ -228,22 +201,14 @@ def get_sun_data(lat, lon, date_str):
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=sunrise,sunset&timezone=Asia%2FTokyo&start_date={date_str}&end_date={date_str}"
         r = requests.get(url)
         data = r.json()
-        sunrise = data['daily']['sunrise'][0].split("T")[1]
-        sunset = data['daily']['sunset'][0].split("T")[1]
-        return sunrise, sunset
-    except:
-        return None, None
+        return data['daily']['sunrise'][0].split("T")[1], data['daily']['sunset'][0].split("T")[1]
+    except: return None, None
 
 # バケツ管理
-if 'selected_tags' not in st.session_state:
-    st.session_state['selected_tags'] = []
-
+if 'selected_tags' not in st.session_state: st.session_state['selected_tags'] = []
 def add_tag(tag_text):
-    if tag_text not in st.session_state['selected_tags']:
-        st.session_state['selected_tags'].append(tag_text)
-
-def clear_tags():
-    st.session_state['selected_tags'] = []
+    if tag_text not in st.session_state['selected_tags']: st.session_state['selected_tags'].append(tag_text)
+def clear_tags(): st.session_state['selected_tags'] = []
 
 def create_grid(items, cols=4):
     for i in range(0, len(items), cols):
@@ -251,233 +216,231 @@ def create_grid(items, cols=4):
         for j, col in enumerate(columns):
             if i + j < len(items):
                 label, val = items[i + j]
-                if col.button(label, key=f"btn_{val}_{i}_{j}", use_container_width=True):
-                    add_tag(val)
+                if col.button(label, key=f"btn_{val}_{i}_{j}", use_container_width=True): add_tag(val)
+
+def render_spot_card(spot, index):
+    """共通のスポットカード表示関数"""
+    card_title = f"📍 {spot.get('name', '名称不明')} ({spot.get('area', '')})"
+    
+    # 確信度がある場合は表示
+    if 'confidence' in spot:
+        conf = spot['confidence']
+        icon = "🟢" if conf == "高" else "🟡" if conf == "中" else "🔴"
+        card_title += f" {icon}"
+
+    with st.expander(card_title, expanded=True if index==0 else False):
+        # 緯度経度があればマップ表示
+        if 'lat' in spot and 'lon' in spot and spot['lat'] != 0:
+            try:
+                df_map = pd.DataFrame({'lat': [spot['lat']], 'lon': [spot['lon']]})
+                st.map(df_map, size=20, color='#FF4B4B', use_container_width=True)
+            except: pass
+            
+        st.caption("👇 アクション (アプリで開く)")
+        b1, b2, b3 = st.columns(3)
+        q_enc = urllib.parse.quote(spot.get('search_name', spot.get('name', '')))
+        
+        url_map = f"https://www.google.com/maps/search/?api=1&query={q_enc}"
+        url_img = f"https://www.google.com/search?q={q_enc}+実写+風景&tbm=isch"
+        url_web = f"https://www.google.com/search?q={q_enc}"
+        
+        with b1: st.markdown(f'<a href="{url_map}" target="_blank" class="custom-link-btn">📍 マップ</a>', unsafe_allow_html=True)
+        with b2: st.markdown(f'<a href="{url_img}" target="_blank" class="custom-link-btn">📷 写真検索</a>', unsafe_allow_html=True)
+        with b3: st.markdown(f'<a href="{url_web}" target="_blank" class="custom-link-btn">🌐 検索</a>', unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.write(f"**分析・理由:** {spot.get('reason', '')}")
+        perm = spot.get('permission', '要確認')
+        st.caption(f"ℹ️ {perm}")
 
 # ==========================================
 # 画面構成
 # ==========================================
 
-# --- 🛒 バケツエリア (固定表示) ---
+# 固定ヘッダー
 header_html = f"""
 <div class="sticky-header">
-    <div style="text-align:center; color:white; font-size:14px; margin-bottom:5px;">🇯🇵 Video Planner</div>
+    <div style="text-align:center; color:white; font-size:14px; margin-bottom:5px;">🇯🇵 Japan Video Planner</div>
     <div class="tag-container">
 """
 if st.session_state['selected_tags']:
-    for tag in st.session_state['selected_tags']:
-        header_html += f'<span class="selected-tag">{tag}</span>'
-else:
-    header_html += '<span style="color:#aaa; font-size:11px;">👇 スタンプを押すとここに追加されます</span>'
-
-header_html += """
-    </div>
-</div>
-"""
+    for tag in st.session_state['selected_tags']: header_html += f'<span class="selected-tag">{tag}</span>'
+else: header_html += '<span style="color:#aaa; font-size:11px;">👇 スタンプを押すとここに追加されます</span>'
+header_html += "</div></div>"
 st.markdown(header_html, unsafe_allow_html=True)
 
-# --- メインタブ ---
-main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"])
+# メインタブ
+tab1, tab2, tab3, tab4 = st.tabs(["🧩 プラン作成", "🔍 ワード検索", "🕵️‍♂️ 画像特定", "☀️ 太陽シミュ"])
 
 # ----------------------------------
-# タブ1: プラン作成
+# 1. プラン作成 (スタンプ)
 # ----------------------------------
-with main_tab1:
-    if st.button("🗑️ 選択タグをリセット", use_container_width=True):
+with tab1:
+    if st.button("🗑️ タグクリア", use_container_width=True):
         clear_tags()
         st.rerun()
 
     sub_t1, sub_t2, sub_t3 = st.tabs(["✨ 雰囲気", "📍 ロケ地", "🕒 時間"])
-    
     with sub_t1:
-        items_atm = [
-            ("🎞️ レトロ", "昭和レトロ"), ("🏠 ノスタル", "ノスタルジック"), ("☕ チル", "チル"),
-            ("🤫 静寂", "静か"), ("😌 リラックス", "落ち着く"), ("🍃 廃墟感", "廃墟"),
-            ("🥀 退廃美", "退廃的"), ("🤖 サイバー", "サイバーパンク"), ("🚀 近未来", "SF"),
-            ("🏙️ 都会的", "都会的"), ("💎 高級感", "ラグジュアリー"), ("⚡ 活気", "エネルギッシュ"),
-            ("👥 雑踏", "人混み"), ("🌸 儚い", "儚い"), ("🎨 映え", "カラフル"),
-            ("🎥 シネマ", "映画風"), ("🖤 無機質", "無機質"), ("👻 不気味", "不気味")
-        ]
-        create_grid(items_atm, cols=4)
-
+        items = [("🎞️ レトロ", "昭和レトロ"), ("🏠 ノスタル", "ノスタルジック"), ("☕ チル", "チル"), ("🤫 静寂", "静か"), ("🍃 廃墟感", "廃墟"), ("🤖 サイバー", "サイバーパンク"), ("🚀 近未来", "SF"), ("🏙️ 都会的", "都会的"), ("💎 高級感", "ラグジュアリー"), ("🎨 映え", "カラフル"), ("🎥 シネマ", "映画風"), ("👻 不気味", "不気味")]
+        create_grid(items)
     with sub_t2:
-        items_loc = [
-            ("⛩️ 神社", "神社"), ("🏯 寺院", "寺院"), ("🇯🇵 和風", "和風建築"),
-            ("🌉 橋", "橋"), ("🌊 海", "海"), ("🛶 川", "川"),
-            ("🚢 港", "港"), ("🌳 公園", "公園"), ("🌲 森林", "森林"),
-            ("🌿 緑", "自然"), ("🏙️ ビル", "高層ビル"), ("🏢 屋上", "屋上"),
-            ("🔭 展望", "展望台"), ("🛤️ 路地裏", "路地裏"), ("🏮 横丁", "飲み屋街"),
-            ("🏭 工場", "工場"), ("📦 倉庫", "倉庫"), ("⚙️ 鉄骨", "鉄骨"),
-            ("🛍️ 商店街", "商店街"), ("🏛️ 建築", "有名建築"), ("🚉 駅", "駅構内"),
-            ("🚇 地下", "地下通路"), ("♨️ 温泉", "温泉街"), ("🌾 田舎", "田園")
-        ]
-        create_grid(items_loc, cols=4)
-
+        items = [("⛩️ 神社", "神社"), ("🏯 寺院", "寺院"), ("🇯🇵 和風", "和風建築"), ("🌉 橋", "橋"), ("🌊 海", "海"), ("🌳 公園", "公園"), ("🌿 緑", "自然"), ("🏙️ ビル", "高層ビル"), ("🛤️ 路地裏", "路地裏"), ("🏮 横丁", "飲み屋街"), ("🏭 工場", "工場"), ("⚙️ 鉄骨", "鉄骨"), ("🚉 駅", "駅構内"), ("♨️ 温泉", "温泉街")]
+        create_grid(items)
     with sub_t3:
-        items_time = [
-            ("🌅 早朝", "早朝"), ("🚷 無人", "無人"), ("🌞 昼間", "昼間"),
-            ("🔵 青空", "青空"), ("🌇 夕方", "夕暮れ"), ("🧡 マジック", "マジックアワー"),
-            ("🌃 深夜", "深夜"), ("🌑 暗闇", "暗闇"), ("✨ 夜景", "夜景"),
-            ("💡 ネオン", "ネオン"), ("☔ 雨", "雨"), ("💧 反射", "リフレクション"),
-            ("☁️ 曇り", "曇り"), ("🌸 春/桜", "桜"), ("🍂 秋/紅葉", "紅葉"),
-            ("❄️ 冬/雪", "雪")
-        ]
-        create_grid(items_time, cols=4)
+        items = [("🌅 早朝", "早朝"), ("🚷 無人", "無人"), ("🌞 昼間", "昼間"), ("🌇 夕方", "夕暮れ"), ("🧡 マジック", "マジックアワー"), ("🌃 深夜", "深夜"), ("✨ 夜景", "夜景"), ("💡 ネオン", "ネオン"), ("☔ 雨", "雨"), ("🌸 春", "桜"), ("🍂 秋", "紅葉"), ("❄️ 冬", "雪")]
+        create_grid(items)
 
-    # 検索フォーム
     st.markdown("---")
-    st.markdown("##### 📍 条件指定")
-    with st.form(key='search_form'):
-        c1, c2 = st.columns(2)
-        with c1:
-            target_area = st.text_input("エリア", placeholder="例: 大阪")
-        with c2:
-            style = st.radio("スタイル", ["👤 一人", "👥 複数"])
-        
-        default_text = " ".join(st.session_state['selected_tags'])
-        additional_text = st.text_input("キーワード", placeholder="例: 穴場", value="")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        submit_button = st.form_submit_button(label='🇯🇵 検索スタート', type="primary", use_container_width=True)
+    with st.form("stamp_search"):
+        area = st.text_input("エリア (任意)", placeholder="例: 大阪")
+        kw = st.text_input("キーワード (任意)", placeholder="例: 穴場")
+        if st.form_submit_button("🇯🇵 検索スタート", type="primary", use_container_width=True):
+            with st.spinner('AIがプラン作成中...'):
+                prompt = f"""
+                エリア: {area or '日本全国'}
+                条件: {' '.join(st.session_state['selected_tags'])} {kw}
+                日本の撮影スポットを5つ提案。
+                
+                出力は以下のJSONフォーマットのみ。マークダウン不要。
+                [
+                    {{
+                        "name": "スポット名",
+                        "search_name": "Google検索用",
+                        "area": "都道府県",
+                        "reason": "理由",
+                        "permission": "許可",
+                        "lat": 35.0,
+                        "lon": 135.0
+                    }}
+                ]
+                """
+                try:
+                    res = model.generate_content(prompt)
+                    json_str = re.search(r'\[.*\]', res.text, re.DOTALL).group(0)
+                    spots = json.loads(json_str)
+                    st.success("✅ 作成完了")
+                    for i, s in enumerate(spots): render_spot_card(s, i)
+                except: st.error("検索に失敗しました")
 
-    if submit_button:
-        area_query = target_area if target_area else "日本国内"
-        final_query = f"{default_text} {additional_text}".strip()
-        
-        if not final_query and not target_area:
-            st.warning("タグかエリアを入力してください")
+# ----------------------------------
+# 2. ワード検索
+# ----------------------------------
+with tab2:
+    st.markdown("##### 🔍 言葉から探す")
+    st.caption("抽象的な言葉でも、AIが意図を汲み取って日本の実写スポットを探します")
+    word_query = st.text_input("検索ワード", placeholder="例: ブレードランナー風、世紀末...")
+    
+    if st.button("🚀 AI検索", type="primary", use_container_width=True):
+        if not word_query:
+            st.warning("ワードを入力してください")
         else:
-            with st.spinner('AIプランニング中...'):
+            with st.spinner('AIが翻訳＆リサーチ中...'):
                 try:
                     prompt = f"""
-                    エリア: {area_query}
-                    条件: {final_query}
-                    スタイル: {style}
+                    ユーザーの検索ワード: 「{word_query}」
                     
-                    動画撮影スポットを5つ提案。
-                    **必ず以下のJSONフォーマットのみを出力してください。**
+                    タスク:
+                    1. ワードを英語変換 (例: 世紀末 -> Post-apocalyptic)。
+                    2. そのニュアンスに合う「日本国内の実写撮影スポット」を5つ特定。
                     
+                    出力JSONのみ:
                     [
                         {{
                             "name": "スポット名",
-                            "search_name": "GoogleMap検索用名称",
+                            "search_name": "Google検索用",
                             "area": "都道府県",
-                            "reason": "選定理由",
-                            "permission": "許可目安",
-                            "video_idea": "構成案",
-                            "script": "脚本",
-                            "fashion": "服装",
-                            "bgm": "BGM",
-                            "sns_info": "SNSタグ"
+                            "reason": "理由",
+                            "english_keyword": "英語KW",
+                            "lat": 35.0,
+                            "lon": 135.0
                         }}
                     ]
                     """
-                    response = model.generate_content(prompt)
-                    text_resp = response.text.strip()
-                    
-                    if text_resp.startswith("```json"):
-                        text_resp = text_resp[7:-3]
-                    elif text_resp.startswith("```"):
-                        text_resp = text_resp[3:-3]
-                    
-                    match = re.search(r'\[.*\]', text_resp, re.DOTALL)
+                    res = model.generate_content(prompt)
+                    match = re.search(r'\[.*\]', res.text, re.DOTALL)
                     if match:
-                        json_str = match.group(0)
-                        spots = json.loads(json_str)
-                        
-                        st.success("✅ プラン作成完了")
-                        save_text = f"【撮影プラン】\nエリア: {area_query}\nテーマ: {final_query}\n\n"
-                        
-                        for i, spot in enumerate(spots, 1):
-                            save_text += f"[{i}] {spot['name']}\n ポイント: {spot['reason']}\n 脚本: {spot['script']}\n MAP: {spot['search_name']}\n\n"
-                            
-                            with st.expander(f"📍 {spot['name']}", expanded=False):
-                                st.caption("👇 アクション (アプリで開きます)")
-                                b1, b2, b3 = st.columns(3)
-                                
-                                # URLエンコードしてリンク生成
-                                q_raw = spot['search_name']
-                                q_enc = urllib.parse.quote(q_raw)
-                                
-                                # Google Maps (アプリ起動用ユニバーサルリンク)
-                                url_map = f"https://www.google.com/maps/search/?api=1&query={q_enc}"
-                                # 画像検索
-                                url_img = f"https://www.google.com/search?q={q_enc}&tbm=isch"
-                                # ルート案内
-                                url_dir = f"https://www.google.com/maps/dir/?api=1&destination={q_enc}"
-                                
-                                # HTMLリンクボタンを作成して埋め込む
-                                with b1:
-                                    st.markdown(f'<a href="{url_map}" target="_blank" rel="noopener noreferrer" class="custom-link-btn">📍 マップ</a>', unsafe_allow_html=True)
-                                with b2:
-                                    st.markdown(f'<a href="{url_img}" target="_blank" rel="noopener noreferrer" class="custom-link-btn">📷 画像</a>', unsafe_allow_html=True)
-                                with b3:
-                                    st.markdown(f'<a href="{url_dir}" target="_blank" rel="noopener noreferrer" class="custom-link-btn">🚶‍♂️ ナビ</a>', unsafe_allow_html=True)
-                                    
-                                st.markdown("---")
-                                perm = spot.get('permission', '要確認')
-                                if "禁止" in perm or "許可" in perm: st.error(f"⚠️ {perm}")
-                                else: st.caption(f"ℹ️ {perm}")
-                                
-                                t1, t2 = st.tabs(["🎥 構成・脚本", "👗 服装・SNS"])
-                                with t1:
-                                    st.info(f"**{spot.get('video_idea', '')}**")
-                                    st.markdown("**脚本:**")
-                                    st.code(spot.get('script', ''), language="text")
-                                with t2:
-                                    st.write(f"👗 **Fashion:** {spot.get('fashion', '')}")
-                                    st.write(f"🎵 **BGM:** {spot.get('bgm', '')}")
-                                    st.code(spot.get('sns_info', ''), language="text")
-
-                        st.download_button("📥 テキスト保存", save_text, "plan.txt", use_container_width=True)
-                    
-                    else:
-                        st.error("AIデータの読み取りに失敗しました。再試行してください。")
-
-                except Exception as e:
-                    st.error(f"エラーが発生しました: {e}")
+                        spots = json.loads(match.group(0))
+                        en_kw = spots[0].get('english_keyword', '')
+                        st.info(f"🔤 英語変換: **{en_kw}** での検索結果も含みます")
+                        for i, s in enumerate(spots): render_spot_card(s, i)
+                    else: st.error("AIからの応答エラー")
+                except Exception as e: st.error(f"エラー: {e}")
 
 # ----------------------------------
-# タブ2: 太陽シミュレーション
+# 3. 画像検索 (特定モード)
 # ----------------------------------
-with main_tab2:
-    st.markdown("##### ☀️ Sun Tracker")
-    col_city, col_date = st.columns(2)
-    with col_city:
-        city_name = st.selectbox("都市を選択", list(CITIES.keys()))
-    with col_date:
-        target_date = st.date_input("撮影日", datetime.date.today())
+with tab3:
+    st.markdown("##### 🕵️‍♂️ 画像から場所特定")
+    st.caption("画像をドロップしてください。AIが場所を特定、または似たロケ地を探します。")
     
-    if st.button("計算する 🌤️", use_container_width=True):
-        lat = CITIES[city_name]["lat"]
-        lon = CITIES[city_name]["lon"]
-        date_str = target_date.strftime("%Y-%m-%d")
+    uploaded_file = st.file_uploader("画像をアップロード", type=["jpg", "png", "jpeg"])
+    
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="解析対象の画像", use_container_width=True)
         
-        sunrise, sunset = get_sun_data(lat, lon, date_str)
-        
-        if sunrise and sunset:
-            sr_h, sr_m = map(int, sunrise.split(":"))
-            ss_h, ss_m = map(int, sunset.split(":"))
-            
-            golden_start = f"{ss_h}:{(ss_m - 30):02d}" if ss_m >= 30 else f"{ss_h-1}:{(ss_m + 30):02d}"
-            golden_end = f"{ss_h}:{(ss_m + 15):02d}" if ss_m + 15 < 60 else f"{ss_h+1}:{(ss_m + 15 - 60):02d}"
-            
+        if st.button("🗺️ 場所を特定する", type="primary", use_container_width=True):
+            with st.spinner('AIが画像を凝視中...'):
+                try:
+                    prompt = """
+                    あなたはロケ地特定のプロフェッショナルです。
+                    この画像を分析し、撮影された場所、またはその雰囲気に酷似した日本国内の場所を特定してください。
+                    
+                    【ルール】
+                    1. 特定のランドマークなら、その場所を1つピンポイントで提示。
+                    2. 特定できない一般的な風景なら、似た雰囲気が撮れる日本の場所を3つ提案。
+                    
+                    出力JSONのみ:
+                    [
+                        {{
+                            "name": "スポット名",
+                            "search_name": "Google検索用(県名含む)",
+                            "area": "都道府県",
+                            "reason": "画像の特徴（例：看板、建物から特定）",
+                            "confidence": "高/中/低",
+                            "lat": 35.6895,
+                            "lon": 139.6917
+                        }}
+                    ]
+                    """
+                    res = model.generate_content([prompt, image])
+                    match = re.search(r'\[.*\]', res.text, re.DOTALL)
+                    if match:
+                        spots = json.loads(match.group(0))
+                        st.success("✅ 分析完了")
+                        
+                        # 分析結果の要約表示
+                        if spots:
+                            top = spots[0]
+                            if top.get('confidence') == '高':
+                                st.info(f"🎯 **特定しました:** これは **{top['name']}** ({top['area']}) の可能性が高いです。")
+                            else:
+                                st.warning(f"🤔 完全に特定はできませんでしたが、**{top['area']}** 周辺、または以下の場所が似ています。")
+
+                        for i, s in enumerate(spots): render_spot_card(s, i)
+                    else: st.error("解析できませんでした")
+                except Exception as e: st.error(f"エラー: {e}")
+
+# ----------------------------------
+# 4. 太陽シミュ
+# ----------------------------------
+with tab4:
+    st.markdown("##### ☀️ Sun Tracker")
+    c1, c2 = st.columns(2)
+    with c1: city = st.selectbox("都市", list(CITIES.keys()))
+    with c2: date = st.date_input("日付", datetime.date.today())
+    
+    if st.button("計算 🌤️", use_container_width=True):
+        sr, ss = get_sun_data(CITIES[city]["lat"], CITIES[city]["lon"], date.strftime("%Y-%m-%d"))
+        if sr:
             st.markdown(f"""
             <div class="sun-card">
-                <h4>📅 {date_str} ({city_name})</h4>
-                <p><strong>🌅 日の出:</strong> {sunrise}</p>
-                <p><strong>🌞 南中 (目安):</strong> 12:00頃 (南)</p>
-                <p><strong>🌇 日の入り:</strong> {sunset}</p>
+                <h4>{city} ({date})</h4>
+                <p>🌅 日出: {sr} | 🌇 日没: {ss}</p>
+                <div style="background:#d4af37; color:#000; padding:5px; border-radius:5px; margin-top:10px;">
+                ✨ マジックアワー: 日没前後30分
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            
-            st.markdown(f"""
-            <div class="golden-hour">
-                ✨ マジックアワー (Golden Hour)<br>
-                {golden_start} 〜 {golden_end}<br>
-                <span style="font-size:0.8em; color:#333;">※空が最も美しく焼ける時間帯です</span>
-            </div>
-            """, unsafe_allow_html=True)
-            st.info(f"🧭 **太陽の方角**: {sunrise}頃は東、12時は南、{sunset}頃は西です。")
-        else:
-            st.error("データの取得に失敗しました。")
+            st.info(f"🧭 **太陽の方角**: {sr}頃は東、12時は南、{ss}頃は西です。")
