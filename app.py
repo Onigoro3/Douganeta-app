@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import requests
 import datetime
+import re  # 正規表現用に追加
 from dotenv import load_dotenv
 
 # --- 設定の読み込み ---
@@ -14,41 +15,80 @@ load_dotenv()
 st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整 (画面固定 & スマホ2列 & ボタン装飾)
+# 🎨 デザイン調整 (固定ヘッダー修正 & 配色改善)
 # ==========================================
 st.markdown("""
     <style>
     /* ヘッダー・フッター削除 */
     header[data-testid="stHeader"], footer {display: none !important;}
     
-    /* 全体の余白調整 */
+    /* 全体の余白調整 (固定ヘッダーの分だけ上を空ける) */
     .block-container {
-        padding-top: 0rem !important;
+        padding-top: 140px !important; /* バケツとタブの高さ分 */
         padding-bottom: 5rem !important;
         padding-left: 0.2rem !important;
         padding-right: 0.2rem !important;
     }
 
-    /* ★画面固定 (Sticky) 設定★ */
-    .tag-container-wrapper {
-        position: sticky;
+    /* ★画面固定エリア (バケツ) ★ */
+    .sticky-header {
+        position: fixed;
         top: 0;
-        z-index: 1000;
-        background-color: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(5px);
-        padding: 5px 5px 0 5px;
-        border-bottom: 1px solid #eee;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-    div[data-baseweb="tab-list"] {
-        position: sticky !important;
-        top: 60px !important;
-        z-index: 999 !important;
-        background-color: rgba(255, 255, 255, 0.95) !important;
-        padding-top: 5px !important;
-        box-shadow: 0 2px 3px rgba(0,0,0,0.05);
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        background-color: rgba(30, 30, 30, 0.95); /* 背景を濃い色に */
+        backdrop-filter: blur(10px);
+        padding: 10px 5px 5px 5px;
+        border-bottom: 1px solid #444;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     
+    /* バケツ内のタグデザイン */
+    .tag-container {
+        text-align: center;
+        min-height: 30px;
+        margin-bottom: 5px;
+    }
+    .selected-tag {
+        display: inline-block;
+        background-color: #FF4B4B;
+        color: white !important;
+        padding: 4px 10px;
+        margin: 2px;
+        border-radius: 15px;
+        font-size: 11px;
+        font-weight: bold;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    /* ★タブのデザイン改善 (文字色を強制指定) ★ */
+    /* タブのコンテナも固定ヘッダーの一部として扱うための位置調整は難しいので、
+       今回はバケツのみを完全固定し、タブは見やすさ優先で配置します */
+       
+    div[data-baseweb="tab-list"] {
+        background-color: transparent !important;
+        margin-bottom: 10px;
+    }
+    
+    /* タブのボタン文字色 */
+    button[data-baseweb="tab"] {
+        color: #cccccc !important; /* 未選択は薄いグレー */
+        font-weight: bold !important;
+        background-color: transparent !important;
+    }
+    
+    /* 選択中のタブ */
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #FF4B4B !important; /* 選択中は赤 */
+        border-bottom-color: #FF4B4B !important;
+    }
+    
+    /* タブのハイライトバー */
+    div[data-baseweb="tab-highlight"] {
+        background-color: #FF4B4B !important;
+    }
+
     /* スマホレイアウト制御 (2列強制) */
     @media (max-width: 768px) {
         [data-testid="stHorizontalBlock"] {
@@ -91,36 +131,16 @@ st.markdown("""
         border-color: #FF4B4B !important;
         transform: scale(0.98);
     }
-
-    /* バケツデザイン */
-    .tag-container {
-        background-color: transparent;
-        padding: 5px;
-        text-align: center;
-        min-height: 35px;
-        color: #333;
-    }
-    .selected-tag {
-        display: inline-block;
-        background-color: #FF4B4B;
-        color: white !important;
-        padding: 4px 10px;
-        margin: 2px;
-        border-radius: 15px;
-        font-size: 11px;
-        font-weight: bold;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    }
-
-    /* 太陽シミュレーションエリア */
+    
+    /* 太陽シミュエリア */
     .sun-card {
-        background-color: #f0f8ff;
+        background-color: #262730; /* ダークモード対応 */
         padding: 15px;
         border-radius: 12px;
-        border: 1px solid #b0e0e6;
+        border: 1px solid #444;
         margin-bottom: 15px;
         text-align: center;
-        color: #333;
+        color: #fff;
     }
     .golden-hour {
         background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
@@ -218,19 +238,27 @@ def create_grid(items, cols=4):
 # 画面構成
 # ==========================================
 
-# --- 🛒 バケツエリア (画面固定) ---
-st.markdown('<div class="tag-container-wrapper">', unsafe_allow_html=True)
-st.markdown("<h5 style='text-align: center; margin:0; padding:0;'>🇯🇵 Video Planner</h5>", unsafe_allow_html=True)
-
+# --- 🛒 バケツエリア (固定表示) ---
+# コンテナを使わず、HTML/CSSで直接描画して固定する
+header_html = f"""
+<div class="sticky-header">
+    <div style="text-align:center; color:white; font-size:14px; margin-bottom:5px;">🇯🇵 Video Planner</div>
+    <div class="tag-container">
+"""
 if st.session_state['selected_tags']:
-    tags_html = "".join([f'<span class="selected-tag">{tag}</span>' for tag in st.session_state['selected_tags']])
-    st.markdown(f'<div class="tag-container">{tags_html}</div>', unsafe_allow_html=True)
-    if st.button("🗑️ 選択リセット", use_container_width=True, key="reset_top"):
-        clear_tags()
-        st.rerun()
+    for tag in st.session_state['selected_tags']:
+        header_html += f'<span class="selected-tag">{tag}</span>'
 else:
-    st.markdown("<div class='tag-container' style='color:#999; font-size:11px; padding-top:5px;'>👇 スタンプを押すとここに追加されます</div>", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+    header_html += '<span style="color:#aaa; font-size:11px;">👇 スタンプを押すとここに追加されます</span>'
+
+header_html += """
+    </div>
+</div>
+"""
+st.markdown(header_html, unsafe_allow_html=True)
+
+# 固定ヘッダーのリセットボタン用（HTML内にはボタンを埋め込めないので、透明なエリアを作る等のハックが必要だが、
+# 簡略化のため、画面上部にリセットボタンだけ別途配置するか、タブ内に配置する）
 
 # --- メインタブ ---
 main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"])
@@ -239,6 +267,11 @@ main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"
 # タブ1: プラン作成
 # ----------------------------------
 with main_tab1:
+    # バケツリセットボタンをここに配置（押しやすい位置）
+    if st.button("🗑️ 選択タグをリセット", use_container_width=True):
+        clear_tags()
+        st.rerun()
+
     sub_t1, sub_t2, sub_t3 = st.tabs(["✨ 雰囲気", "📍 ロケ地", "🕒 時間"])
     
     with sub_t1:
@@ -307,75 +340,90 @@ with main_tab1:
                     スタイル: {style}
                     
                     動画撮影スポットを5つ提案。
-                    出力JSON:
-                    name, search_name(GoogleMap用), area, reason, permission, 
-                    video_idea, script, fashion, bgm, sns_info, lat, lon
+                    **必ず以下のJSONフォーマットのみを出力してください。** 余計な挨拶やマークダウン(```json等)は不要です。
+                    
+                    [
+                        {{
+                            "name": "スポット名",
+                            "search_name": "GoogleMap検索用名称",
+                            "area": "都道府県",
+                            "reason": "選定理由",
+                            "permission": "許可目安",
+                            "video_idea": "構成案",
+                            "script": "脚本",
+                            "fashion": "服装",
+                            "bgm": "BGM",
+                            "sns_info": "SNSタグ"
+                        }}
+                    ]
                     """
                     response = model.generate_content(prompt)
                     text_resp = response.text.strip()
-                    if text_resp.startswith("```json"): text_resp = text_resp[7:-3]
-                    elif text_resp.startswith("```"): text_resp = text_resp[3:-3]
-                    spots = json.loads(text_resp)
                     
-                    st.success("✅ プラン作成完了")
-                    save_text = f"【撮影プラン】\nエリア: {area_query}\nテーマ: {final_query}\n\n"
+                    # --- JSON抽出ロジックの強化 ---
+                    # 1. マークダウンの ```json ... ``` を削除
+                    if text_resp.startswith("```json"):
+                        text_resp = text_resp[7:-3]
+                    elif text_resp.startswith("```"):
+                        text_resp = text_resp[3:-3]
                     
-                    df = pd.DataFrame(spots)
-                    st.map(df, latitude='lat', longitude='lon', size=20, color='#FF4B4B')
-
-                    for i, spot in enumerate(spots, 1):
-                        save_text += f"[{i}] {spot['name']}\n ポイント: {spot['reason']}\n 脚本: {spot['script']}\n MAP: {spot['search_name']}\n\n"
+                    # 2. 正規表現で [ ... ] の部分だけを無理やり抜き出す
+                    match = re.search(r'\[.*\]', text_resp, re.DOTALL)
+                    if match:
+                        json_str = match.group(0)
+                        spots = json.loads(json_str)
                         
-                        # --- カード表示 ---
-                        with st.expander(f"📍 {spot['name']}", expanded=False):
-                            # --- 復活・追加したアクションボタン ---
-                            st.caption("👇 アクション")
-                            b1, b2, b3 = st.columns(3)
+                        st.success("✅ プラン作成完了")
+                        save_text = f"【撮影プラン】\nエリア: {area_query}\nテーマ: {final_query}\n\n"
+                        
+                        # データフレーム作成用（緯度経度はAIが不安定なので今回は省略または別途取得推奨だが、簡易的に表示）
+                        # エラー回避のため地図は一旦ボタンリンクに任せる
+                        
+                        for i, spot in enumerate(spots, 1):
+                            save_text += f"[{i}] {spot['name']}\n ポイント: {spot['reason']}\n 脚本: {spot['script']}\n MAP: {spot['search_name']}\n\n"
                             
-                            # URLエンコード用の準備
-                            q_map = spot['search_name'].replace(" ", "+")
-                            url_map = f"https://www.google.com/maps/search/?api=1&query={q_map}"
-                            url_img = f"https://www.google.com/search?q={q_map}&tbm=isch"
-                            url_dir = f"https://www.google.com/maps/dir/?api=1&destination={q_map}"
-                            
-                            with b1:
-                                st.link_button("📍 マップ", url_map, use_container_width=True)
-                            with b2:
-                                st.link_button("📷 画像検索", url_img, use_container_width=True) # これを追加
-                            with b3:
-                                st.link_button("🚶‍♂️ ナビ", url_dir, use_container_width=True)
+                            with st.expander(f"📍 {spot['name']}", expanded=False):
+                                st.caption("👇 アクション")
+                                b1, b2, b3 = st.columns(3)
                                 
-                            st.markdown("---")
+                                q_map = spot['search_name'].replace(" ", "+")
+                                url_map = f"[https://www.google.com/maps/search/?api=1&query=](https://www.google.com/maps/search/?api=1&query=){q_map}"
+                                url_img = f"[https://www.google.com/search?q=](https://www.google.com/search?q=){q_map}&tbm=isch"
+                                url_dir = f"[https://www.google.com/maps/dir/?api=1&destination=](https://www.google.com/maps/dir/?api=1&destination=){q_map}"
+                                
+                                with b1: st.link_button("📍 マップ", url_map, use_container_width=True)
+                                with b2: st.link_button("📷 画像検索", url_img, use_container_width=True)
+                                with b3: st.link_button("🚶‍♂️ ナビ", url_dir, use_container_width=True)
+                                    
+                                st.markdown("---")
+                                perm = spot.get('permission', '要確認')
+                                if "禁止" in perm or "許可" in perm: st.error(f"⚠️ {perm}")
+                                else: st.caption(f"ℹ️ {perm}")
+                                
+                                t1, t2 = st.tabs(["🎥 構成・脚本", "👗 服装・SNS"])
+                                with t1:
+                                    st.info(f"**{spot.get('video_idea', '')}**")
+                                    st.markdown("**脚本:**")
+                                    st.code(spot.get('script', ''), language="text")
+                                with t2:
+                                    st.write(f"👗 **Fashion:** {spot.get('fashion', '')}")
+                                    st.write(f"🎵 **BGM:** {spot.get('bgm', '')}")
+                                    st.code(spot.get('sns_info', ''), language="text")
 
-                            # 許可情報
-                            perm = spot['permission']
-                            if "禁止" in perm or "許可" in perm: st.error(f"⚠️ {perm}")
-                            else: st.caption(f"ℹ️ {perm}")
-                            
-                            # 詳細情報タブ
-                            t1, t2 = st.tabs(["🎥 構成・脚本", "👗 服装・SNS"])
-                            with t1:
-                                st.info(f"**{spot['video_idea']}**")
-                                st.markdown("**脚本:**")
-                                st.code(spot['script'], language="text")
-                            with t2:
-                                st.write(f"👗 **Fashion:** {spot['fashion']}")
-                                st.write(f"🎵 **BGM:** {spot['bgm']}")
-                                st.code(spot['sns_info'], language="text")
-
-                    st.download_button("📥 テキスト保存", save_text, "plan.txt", use_container_width=True)
+                        st.download_button("📥 テキスト保存", save_text, "plan.txt", use_container_width=True)
+                    
+                    else:
+                        st.error("AIからの応答形式が不正でした。もう一度お試しください。")
+                        st.write("Raw response:", text_resp) # デバッグ用
 
                 except Exception as e:
-                    st.error("エラーが発生しました")
-                    st.write(e)
+                    st.error(f"エラーが発生しました: {e}")
 
 # ----------------------------------
 # タブ2: 太陽シミュレーション
 # ----------------------------------
 with main_tab2:
     st.markdown("##### ☀️ Sun Tracker")
-    st.caption("撮影日の太陽の動きをシミュレーションします")
-    
     col_city, col_date = st.columns(2)
     with col_city:
         city_name = st.selectbox("都市を選択", list(CITIES.keys()))
@@ -412,11 +460,6 @@ with main_tab2:
                 <span style="font-size:0.8em; color:#333;">※空が最も美しく焼ける時間帯です</span>
             </div>
             """, unsafe_allow_html=True)
-            
-            st.info("🧭 **太陽の方角ガイド**\n\n"
-                    f"・ **{sunrise}頃**: 東から昇ります\n"
-                    "・ **10:00頃**: 南東 (順光で撮るなら北西向き)\n"
-                    "・ **14:00頃**: 南西 (サイド光が良い感じ)\n"
-                    f"・ **{sunset}頃**: 西に沈みます (逆光シルエットのチャンス)")
+            st.info(f"🧭 **太陽の方角**: {sunrise}頃は東、12時は南、{sunset}頃は西です。")
         else:
             st.error("データの取得に失敗しました。")
