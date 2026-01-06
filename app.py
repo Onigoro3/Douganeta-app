@@ -9,10 +9,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- ページ設定 ---
-st.set_page_config(page_title="Tokyo Video Planner", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整
+# 🎨 デザイン調整 (視認性改善 + 全国対応)
 # ==========================================
 st.markdown("""
     <style>
@@ -27,19 +27,30 @@ st.markdown("""
         padding-right: 0.5rem !important;
     }
     
-    /* ボタンデザイン */
+    /* ボタンデザイン (視認性確保) */
     .stButton > button {
         width: 100% !important;
         border-radius: 12px !important;
         min-height: 2.8rem !important;
         height: auto !important;
-        padding: 4px !important;
+        padding: 5px !important;
         font-weight: bold !important;
-        font-size: 0.8rem !important;
-        line-height: 1.2 !important;
+        font-size: 0.85rem !important;
+        line-height: 1.3 !important;
         white-space: normal !important;
-        background-color: #f0f2f6; /* 薄いグレーで統一 */
-        border: 1px solid #dcdcdc;
+        
+        /* ★重要: 色の強制指定★ */
+        background-color: #ffffff !important; /* 背景は白 */
+        color: #262730 !important;           /* 文字は濃いグレー(黒) */
+        border: 1px solid #d0d7de !important; /* 枠線 */
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    
+    /* ボタンホバー時 */
+    .stButton > button:hover {
+        background-color: #f0f2f6 !important;
+        border-color: #FF4B4B !important;
+        color: #FF4B4B !important;
     }
     
     /* 選択されたタグのデザイン */
@@ -48,14 +59,19 @@ st.markdown("""
         padding: 10px;
         border-radius: 10px;
         margin-bottom: 10px;
-        border: 2px solid #FF4B4B; /* 目立たせる */
+        border: 2px solid #FF4B4B;
         text-align: center;
         min-height: 50px;
     }
+    /* ダークモード対策: コンテナ内の文字色も見やすく */
+    .tag-container {
+        color: #333333; 
+    }
+    
     .selected-tag {
         display: inline-block;
         background-color: #FF4B4B;
-        color: white;
+        color: white !important;
         padding: 6px 12px;
         margin: 3px;
         border-radius: 20px;
@@ -66,8 +82,9 @@ st.markdown("""
     
     /* タブの調整 */
     button[data-baseweb="tab"] {
-        font-size: 0.85rem !important;
+        font-size: 0.9rem !important;
         padding: 8px !important;
+        font-weight: bold !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -126,18 +143,16 @@ def clear_tags():
 
 # --- グリッド生成関数 ---
 def create_grid(items, cols=4):
-    """リストを受け取ってボタンを配置する"""
     for i in range(0, len(items), cols):
         columns = st.columns(cols)
         for j, col in enumerate(columns):
             if i + j < len(items):
                 label, val = items[i + j]
-                # ボタンのキーを一意にするためにindexを使用
                 if col.button(label, key=f"btn_{val}_{i}_{j}", use_container_width=True):
                     add_tag(val)
 
 # --- タイトル ---
-st.markdown("<h4 style='text-align: center;'>🎬 Tokyo Video Planner</h4>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center;'>🇯🇵 Japan Video Planner</h4>", unsafe_allow_html=True)
 
 # --- 🛒 バケツ表示 ---
 if st.session_state['selected_tags']:
@@ -150,15 +165,14 @@ if st.session_state['selected_tags']:
         clear_tags()
         st.rerun()
 else:
-    st.markdown("<div class='tag-container' style='color:#bbb; padding-top:15px;'>スタンプを押すとここに追加されます</div>", unsafe_allow_html=True)
+    st.markdown("<div class='tag-container' style='color:#888; padding-top:15px; background-color:#f9f9f9;'>スタンプを押すとここに追加されます</div>", unsafe_allow_html=True)
 
 # --- スタンプ選択エリア ---
 st.markdown("---")
-tab1, tab2, tab3 = st.tabs(["✨ 雰囲気", "📍 場所", "🕒 時間/天気"])
+tab1, tab2, tab3 = st.tabs(["✨ 雰囲気", "📍 ロケ地", "🕒 時間/天気"])
 
 with tab1:
     st.caption("欲しい「感情」や「スタイル」を選んでください")
-    # キーワードをバラバラに分解
     items_atm = [
         ("🎞️ レトロ", "昭和レトロ"), ("🏠 ノスタルジー", "ノスタルジック"), 
         ("☕ チル", "チル"), ("🤫 静寂", "静か"),
@@ -185,7 +199,8 @@ with tab2:
         ("🏮 横丁", "飲み屋街"), ("🏭 工場", "工場"),
         ("📦 倉庫", "倉庫"), ("⚙️ 鉄骨", "インダストリアル"),
         ("🛍️ 商店街", "商店街"), ("🏛️ 有名建築", "建築美"),
-        ("🚉 駅", "駅構内"), ("🚇 地下", "地下通路")
+        ("🚉 駅", "駅構内"), ("🚇 地下", "地下通路"),
+        ("♨️ 温泉街", "温泉街"), ("🌾 田舎", "田園風景")
     ]
     create_grid(items_loc, cols=4)
 
@@ -199,36 +214,62 @@ with tab3:
         ("✨ 夜景", "夜景"), ("💡 ネオン", "ネオン"),
         ("☔ 雨", "雨"), ("💧 反射", "リフレクション"),
         ("☁️ 曇り", "曇り"), ("🌸 春/桜", "桜"),
-        ("🍂 秋/紅葉", "紅葉"), ("❄️ 冬", "冬")
+        ("🍂 秋/紅葉", "紅葉"), ("❄️ 冬/雪", "雪")
     ]
     create_grid(items_time, cols=4)
 
 # --- 検索実行フォーム ---
 st.markdown("---")
+st.markdown("##### 📍 エリア・条件指定")
+
 with st.form(key='search_form'):
-    style = st.radio("スタイル", ["👤 一人 (Vlog)", "👥 複数 (会話劇)"], horizontal=True)
+    # 全国対応のためのエリア入力欄を追加
+    col_area, col_style = st.columns([1, 1])
     
+    with col_area:
+        target_area = st.text_input("エリア (空欄なら全国)", placeholder="例: 大阪、京都、北海道...", value="")
+    
+    with col_style:
+        style = st.radio("撮影スタイル", ["👤 一人 (Vlog)", "👥 複数 (会話劇)"], horizontal=True)
+    
+    # 追加ワード
     default_text = " ".join(st.session_state['selected_tags'])
-    additional_text = st.text_input("追加フリーワード", placeholder="例: 穴場スポット", value="")
+    additional_text = st.text_input("追加キーワード", placeholder="例: 穴場スポット、車で行ける場所", value="")
     
-    submit_button = st.form_submit_button(label='🚀 検索スタート', type="primary", use_container_width=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    submit_button = st.form_submit_button(label='🇯🇵 全国からスポットを探す', type="primary", use_container_width=True)
 
 # --- 結果処理 ---
 if submit_button:
+    # エリア指定の処理
+    area_query = target_area if target_area else "日本国内（全国）"
     final_query = f"{default_text} {additional_text}".strip()
     
-    if not final_query:
-        st.warning("タグを選ぶか、キーワードを入力してください")
+    if not final_query and not target_area:
+        st.warning("タグを選ぶか、エリアやキーワードを入力してください")
     else:
-        with st.spinner('AIがプランを作成中...'):
+        with st.spinner(f'AIが {area_query} からプランを作成中...'):
             try:
                 prompt = f"""
-                テーマ: {final_query}
-                スタイル: {style}
-                東京の撮影スポットを5つ提案。
-                JSON形式:
-                name, search_name(GoogleMap用), area, reason, permission(許可目安), 
-                video_idea(構成案), script(短い脚本), fashion(服装), bgm(音楽), sns_info, lat, lon
+                ターゲットエリア: {area_query}
+                テーマ・条件: {final_query}
+                撮影スタイル: {style}
+                
+                上記の条件で、おすすめの動画撮影スポットを5つ提案してください。
+                
+                【出力形式 (JSON)】
+                name: スポット名
+                search_name: GoogleMap検索用の正確な名称（県名・市町村名を含めること）
+                area: 都道府県・地域名
+                reason: 選定理由
+                permission: 撮影許可の目安
+                video_idea: 構成案
+                script: 短い脚本
+                fashion: 服装
+                bgm: 音楽
+                sns_info: タグとタイトル
+                lat: 緯度
+                lon: 経度
                 """
 
                 response = model.generate_content(prompt)
@@ -239,13 +280,14 @@ if submit_button:
                 
                 spots = json.loads(text_resp)
                 
-                st.success(f"🔍 検索完了: {final_query}")
+                st.success(f"🔍 検索完了: {area_query} / {final_query}")
                 
                 df = pd.DataFrame(spots)
+                # 日本全体が見えるようにズーム調整は自動だが、初期位置を考慮
                 st.map(df, latitude='lat', longitude='lon', size=20, color='#FF4B4B')
 
                 for spot in spots:
-                    with st.expander(f"📍 {spot['name']}", expanded=False):
+                    with st.expander(f"📍 {spot['name']} ({spot['area']})", expanded=False):
                         perm = spot['permission']
                         if "禁止" in perm or "許可" in perm: st.error(f"⚠️ {perm}")
                         else: st.caption(f"ℹ️ {perm}")
