@@ -14,7 +14,7 @@ load_dotenv()
 st.set_page_config(page_title="Japan Video Planner", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 🎨 デザイン調整 (スマホ配列 完全強制版)
+# 🎨 デザイン調整 (安全で美しいグリッド版)
 # ==========================================
 st.markdown("""
     <style>
@@ -25,46 +25,39 @@ st.markdown("""
     .block-container {
         padding-top: 0.5rem !important;
         padding-bottom: 5rem !important;
-        padding-left: 0.2rem !important;
-        padding-right: 0.2rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
     }
 
-    /* ★最重要: スマホでの強制横並びハック★ 
-       Streamlitのデフォルトの「スマホは縦並び」という仕様をmin-width: 0で無効化します
+    /* ★スマホ (幅768px以下) の時のレイアウト制御★ 
+       PCではPython側で指定した列数(4列)になりますが、
+       スマホではここで「幅50%（2列）」に強制書き換えします。
+       これが最も崩れにくい設定です。
     */
-    @media only screen and (max-width: 768px) {
-        /* 横並びコンテナ（行）の設定: 強制的に横向き(row)にする */
-        [data-testid="stHorizontalBlock"] {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 4px !important; /* ボタン間の隙間を少し詰める */
+    @media (max-width: 768px) {
+        /* カラムを横並び許可し、折り返し(wrap)を有効にする */
+        div[data-testid="column"] {
+            width: 50% !important;
+            flex: 0 0 50% !important;
+            min-width: 50% !important;
+            padding: 0 4px !important; /* 左右の隙間 */
         }
         
-        /* カラム（列）の設定: 幅を強制的に縮める */
-        [data-testid="column"] {
-            flex: 1 1 0 !important; /* 均等に縮小・拡大 */
-            width: auto !important;
-            min-width: 0px !important; /* ★これが縦並びを防ぐカギ★ */
-        }
-        
-        /* スマホ時のボタン文字サイズ調整 */
+        /* ボタンの文字サイズ調整 */
         .stButton > button {
-            font-size: 10px !important;
+            font-size: 12px !important;
             padding: 2px !important;
-            min-height: 45px !important;
+            min-height: 48px !important; /* 高さを確保 */
             height: 100% !important;
-            line-height: 1.2 !important;
-            white-space: normal !important; /* 文字折り返しあり */
+            line-height: 1.3 !important;
         }
     }
 
-    /* --- PC・共通デザイン --- */
-    
     /* ボタン共通デザイン */
     .stButton > button {
         width: 100% !important;
         border-radius: 8px !important;
-        min-height: 3rem;
+        min-height: 3.5rem; /* PCでの高さ */
         height: auto;
         font-weight: bold !important;
         
@@ -73,6 +66,7 @@ st.markdown("""
         color: #262730 !important;
         border: 1px solid #d0d7de !important;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        transition: all 0.2s;
     }
     
     /* ボタンを押したときの反応 */
@@ -80,17 +74,22 @@ st.markdown("""
         background-color: #FF4B4B !important;
         color: #ffffff !important;
         border-color: #FF4B4B !important;
+        transform: scale(0.98);
+    }
+    .stButton > button:hover {
+        border-color: #FF4B4B !important;
+        color: #FF4B4B !important;
     }
 
     /* バケツ（選択タグ）のデザイン */
     .tag-container {
         background-color: #ffffff;
-        padding: 5px;
+        padding: 8px;
         border-radius: 8px;
-        margin-bottom: 5px;
+        margin-bottom: 10px;
         border: 2px solid #FF4B4B;
         text-align: center;
-        min-height: 35px;
+        min-height: 40px;
         color: #333;
     }
     
@@ -98,31 +97,32 @@ st.markdown("""
         display: inline-block;
         background-color: #FF4B4B;
         color: white !important;
-        padding: 2px 8px;
-        margin: 2px;
-        border-radius: 10px;
-        font-size: 11px;
+        padding: 4px 10px;
+        margin: 3px;
+        border-radius: 15px;
+        font-size: 12px;
         font-weight: bold;
     }
 
     /* 太陽シミュレーションエリアのデザイン */
     .sun-card {
         background-color: #f0f8ff;
-        padding: 10px;
-        border-radius: 10px;
+        padding: 15px;
+        border-radius: 12px;
         border: 1px solid #b0e0e6;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
         text-align: center;
         color: #333;
     }
     .golden-hour {
         background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
-        padding: 10px;
-        border-radius: 10px;
+        padding: 15px;
+        border-radius: 12px;
         color: #a04000;
         font-weight: bold;
         text-align: center;
-        margin-top: 5px;
+        margin-top: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -178,7 +178,6 @@ CITIES = {
 }
 
 def get_sun_data(lat, lon, date_str):
-    """Open-Meteo APIを使って日の出・日の入りを取得"""
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=sunrise,sunset&timezone=Asia%2FTokyo&start_date={date_str}&end_date={date_str}"
         r = requests.get(url)
@@ -200,30 +199,35 @@ def add_tag(tag_text):
 def clear_tags():
     st.session_state['selected_tags'] = []
 
-def create_grid(items, cols=3):
-    # CSSで行(row)と列(col)を制御するため、通常通りst.columnsを使用
+def create_grid(items, cols=4):
+    """
+    Python側では4列（PC向け）を作成。
+    スマホではCSSで width: 50% に強制されるため、
+    自動的に 2列 x 2行 のグリッドに変身します。
+    """
     for i in range(0, len(items), cols):
         columns = st.columns(cols)
         for j, col in enumerate(columns):
             if i + j < len(items):
                 label, val = items[i + j]
+                # キーをユニークにする
                 if col.button(label, key=f"btn_{val}_{i}_{j}", use_container_width=True):
                     add_tag(val)
 
 # ==========================================
 # 画面構成
 # ==========================================
-st.markdown("<h4 style='text-align: center; margin:0;'>🇯🇵 Video Planner & Sun</h4>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; margin:0;'>🇯🇵 Video Planner & Sun</h3>", unsafe_allow_html=True)
 
-# --- 🛒 バケツ ---
+# --- 🛒 バケツエリア ---
 if st.session_state['selected_tags']:
     tags_html = "".join([f'<span class="selected-tag">{tag}</span>' for tag in st.session_state['selected_tags']])
     st.markdown(f'<div class="tag-container">{tags_html}</div>', unsafe_allow_html=True)
-    if st.button("🗑️ リセット", use_container_width=True):
+    if st.button("🗑️ 選択リセット", use_container_width=True):
         clear_tags()
         st.rerun()
 else:
-    st.markdown("<div class='tag-container' style='color:#999; font-size:11px;'>スタンプを押すとここに追加されます</div>", unsafe_allow_html=True)
+    st.markdown("<div class='tag-container' style='color:#999; font-size:12px; padding-top:10px;'>スタンプを押すとここに追加されます</div>", unsafe_allow_html=True)
 
 # --- メインタブ ---
 main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"])
@@ -234,6 +238,7 @@ main_tab1, main_tab2 = st.tabs(["🧩 プラン作成", "☀️ 太陽シミュ"
 with main_tab1:
     sub_t1, sub_t2, sub_t3 = st.tabs(["✨ 雰囲気", "📍 ロケ地", "🕒 時間"])
     
+    # cols=4に設定。スマホではCSSの効果で「2列」になります。
     with sub_t1:
         items_atm = [
             ("🎞️ レトロ", "昭和レトロ"), ("🏠 ノスタル", "ノスタルジック"), ("☕ チル", "チル"),
@@ -243,7 +248,7 @@ with main_tab1:
             ("👥 雑踏", "人混み"), ("🌸 儚い", "儚い"), ("🎨 映え", "カラフル"),
             ("🎥 シネマ", "映画風"), ("🖤 無機質", "無機質"), ("👻 不気味", "不気味")
         ]
-        create_grid(items_atm, cols=3)
+        create_grid(items_atm, cols=4)
 
     with sub_t2:
         items_loc = [
@@ -256,7 +261,7 @@ with main_tab1:
             ("🛍️ 商店街", "商店街"), ("🏛️ 建築", "有名建築"), ("🚉 駅", "駅構内"),
             ("🚇 地下", "地下通路"), ("♨️ 温泉", "温泉街"), ("🌾 田舎", "田園")
         ]
-        create_grid(items_loc, cols=3)
+        create_grid(items_loc, cols=4)
 
     with sub_t3:
         items_time = [
@@ -267,7 +272,7 @@ with main_tab1:
             ("☁️ 曇り", "曇り"), ("🌸 春/桜", "桜"), ("🍂 秋/紅葉", "紅葉"),
             ("❄️ 冬/雪", "雪")
         ]
-        create_grid(items_time, cols=3)
+        create_grid(items_time, cols=4)
 
     # 検索フォーム
     st.markdown("---")
@@ -282,6 +287,7 @@ with main_tab1:
         default_text = " ".join(st.session_state['selected_tags'])
         additional_text = st.text_input("キーワード", placeholder="例: 穴場", value="")
         
+        st.markdown("<br>", unsafe_allow_html=True)
         submit_button = st.form_submit_button(label='🇯🇵 検索スタート', type="primary", use_container_width=True)
 
     if submit_button:
@@ -310,7 +316,6 @@ with main_tab1:
                     spots = json.loads(text_resp)
                     
                     st.success("✅ プラン作成完了")
-                    
                     save_text = f"【撮影プラン】\nエリア: {area_query}\nテーマ: {final_query}\n\n"
                     
                     df = pd.DataFrame(spots)
@@ -361,7 +366,7 @@ with main_tab2:
             sr_h, sr_m = map(int, sunrise.split(":"))
             ss_h, ss_m = map(int, sunset.split(":"))
             
-            # マジックアワー計算
+            # マジックアワー計算 (日の入り前30分〜日の入り後15分)
             golden_start = f"{ss_h}:{(ss_m - 30):02d}" if ss_m >= 30 else f"{ss_h-1}:{(ss_m + 30):02d}"
             golden_end = f"{ss_h}:{(ss_m + 15):02d}" if ss_m + 15 < 60 else f"{ss_h+1}:{(ss_m + 15 - 60):02d}"
             
